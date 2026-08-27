@@ -1,0 +1,4 @@
+# Trusted DEV wallets — one Solana address per line.
+# Optional label after a space or #.
+# Example:
+# 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU  # my desk

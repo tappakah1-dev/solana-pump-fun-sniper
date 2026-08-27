@@ -1,0 +1,156 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-bg: #08090b;
+  --color-surface: #101214;
+  --color-surface-2: #171a1e;
+  --color-surface-3: #1e2228;
+  --color-fg: #e8e6df;
+  --color-muted: #9a9b93;
+  --color-subtle: #6d6f68;
+  --color-border: #2a2d33;
+  --color-accent: #d7d3c8;
+  --color-accent-fg: #0c0d0f;
+  --color-ring: #d7d3c8;
+  --color-dry: #c4a35a;
+  --color-live: #c45c4a;
+  --color-buy: #5ea17b;
+  --color-rent: #c4a35a;
+  --color-wick: #c9b56a;
+  --color-keep: #6a8fbf;
+  --color-trim: #5aa8b5;
+  --color-moon: #9b7bb8;
+  --color-log-skip: #7a7c76;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-quick: 150ms;
+  --motion-fast: 250ms;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  html,
+  body,
+  #app {
+    min-height: 100%;
+    background: var(--color-bg);
+    color: var(--color-fg);
+  }
+  body {
+    font-family: var(--font-sans);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+.mcap-slider {
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-fg) 16%, transparent);
+  outline: none;
+}
+.mcap-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  border: 2px solid var(--color-bg);
+  cursor: pointer;
+}
+.mcap-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  border: 2px solid var(--color-bg);
+  cursor: pointer;
+}
+.mcap-slider:disabled {
+  opacity: 0.4;
+}
+
+.log-skip {
+  color: var(--color-log-skip);
+}
+.log-buy {
+  color: var(--color-buy);
+}
+.log-rent {
+  color: var(--color-rent);
+}
+.log-wick {
+  color: var(--color-wick);
+}
+.log-keep {
+  color: var(--color-keep);
+}
+.log-trim {
+  color: var(--color-trim);
+}
+.log-think {
+  color: var(--color-keep);
+}
+.log-dead {
+  color: var(--color-live);
+}
+.log-moon {
+  color: var(--color-moon);
+}
+.log-error {
+  color: var(--color-live);
+}
+.log-seen {
+  color: var(--color-muted);
+}
+.log-open {
+  color: var(--color-muted);
+}
+.log-shake {
+  color: var(--color-wick);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

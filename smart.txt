@@ -1,0 +1,4 @@
+# Optional labeled trader wallets.
+# Used only as an exit HINT after we are in a position — never as an entry reason.
+
+SmartSniper11111111111111111111111111111  # desk note: size-in / size-out
