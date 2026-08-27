@@ -72,6 +72,18 @@ export function SettingsPanel() {
             />
           </Label>
 
+          <Label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-bg px-3 py-2">
+            <span>
+              <span className="block text-fg">Paper any coin with socials</span>
+              <span className="block text-xs text-subtle">Dry-run only. Live always uses trusted DEVs.</span>
+            </span>
+            <Switch
+              checked={config.dry_run && config.dry_run_any_socials}
+              disabled={!config.dry_run}
+              onCheckedChange={(v) => setConfigField("dry_run_any_socials", v)}
+            />
+          </Label>
+
           <div className="rounded-lg border border-live/40 bg-live/5 p-3">
             <p className="text-xs text-muted text-pretty">
               Type I UNDERSTAND to arm live buys. The key never appears in the UI, logs, or GitHub.

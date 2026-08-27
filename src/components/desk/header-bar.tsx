@@ -37,6 +37,11 @@ export function HeaderBar() {
 
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={live ? "live" : "dry"}>{live ? "Live" : "Dry run"}</Badge>
+        {!live && config.dry_run_any_socials ? (
+          <Badge variant="ok" className="normal-case tracking-normal">
+            paper any socials
+          </Badge>
+        ) : null}
         <Badge variant={connected ? "ok" : "default"} className="normal-case tracking-normal">
           {connected ? "listening" : "stopped"}
         </Badge>

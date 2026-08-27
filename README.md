@@ -27,8 +27,11 @@ Not financial advice. You can lose the entire ticket. You will, often.
   DEAD) and sizes clips, flatten, or moonbag. THINK lines show the decision.
 - Sells graduated coins on **PumpSwap**, not as “liquidity gone”
 - Logs every decision as a human line and a JSONL record
-- Defaults to **dry-run**. Live is gated by Vercel env + `I UNDERSTAND` +
-  operator whitelist
+- Defaults to **dry-run**. A **Paper any coin with socials** switch (on by
+  default in dry-run) fills live Pump.fun creates that have socials so you can
+  test the exit agent without waiting on a trusted DEV. **Live ignores this**
+  and only buys the allow-list.
+- Live is gated by Vercel env + `I UNDERSTAND` + operator whitelist
 
 ## What it does not do
 

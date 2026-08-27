@@ -47,7 +47,7 @@ export function LogWindow() {
       </div>
       <div ref={scroller} className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-5">
         {logs.length === 0 ? (
-          <div className="text-subtle">No events yet. Add a trusted DEV and press Start.</div>
+          <div className="text-subtle">No events yet. Press Start — dry-run papers coins with socials.</div>
         ) : (
           logs.map((e, i) => (
             <div key={`${e.ts_ms}-${i}`} className={`log-${LOG_TONE[e.level]} whitespace-pre`}>

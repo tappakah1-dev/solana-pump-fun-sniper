@@ -42,6 +42,8 @@ export type SellVenue = "curve" | "pump-amm";
 export interface BotConfig {
   dry_run: boolean;
   live: boolean;
+  /** Dry-run only. Paper-fill any Pump.fun create with socials. Ignored when live. */
+  dry_run_any_socials: boolean;
   rpc_url: string;
   ws_url: string;
   ticket_sol: number;

@@ -14,9 +14,9 @@ import type { MarketSnapshot, TokenCreate } from "./models.ts";
 
 const ORIGIN = Date.parse("2026-08-27T10:00:00Z");
 
-function engine() {
+function engine(cfg: Partial<typeof DEFAULT_CONFIG> = {}) {
   return new BotEngine({
-    config: { ...DEFAULT_CONFIG },
+    config: { ...DEFAULT_CONFIG, ...cfg },
     allowText: DEFAULT_ALLOW_TXT,
     now: ORIGIN,
   });
@@ -63,12 +63,46 @@ function buyAt(e: BotEngine, mcap = 5600, mint = "MintBiz11111111111111111111111
 
 describe("allow-list entry", () => {
   it("not on allow-list → no buy", () => {
-    const e = engine();
+    const e = engine({ dry_run_any_socials: false });
     e.onCreate(create({ creator: OTHER_CREATOR, symbol: "XYZ", name: "Xyz" }));
     e.onSnapshot(snap(e, "MintBiz111111111111111111111111111111111", 5600, { creator: OTHER_CREATOR }));
     const pos = [...e.positions.values()].find((p) => p.phase !== "CLOSED" && p.phase !== "DETECTED");
     assert.equal(pos, undefined);
     assert.ok(e.logs.some((l) => l.level === "SKIP" && l.reason === "not_on_allowlist"));
+    assert.ok(!e.logs.some((l) => l.level === "BUY"));
+  });
+
+  it("dry-run paper-any-socials buys a non-allow coin that has socials", () => {
+    const e = engine({ dry_run: true, live: false, dry_run_any_socials: true });
+    const mint = "MintPaper11111111111111111111111111111111";
+    e.onCreate(
+      create({
+        mint,
+        creator: OTHER_CREATOR,
+        symbol: "PAPER",
+        name: "Paper",
+        socials: { twitter: "https://x.com/paper" },
+      }),
+    );
+    e.onSnapshot(
+      snap(e, mint, 5600, {
+        creator: OTHER_CREATOR,
+        socials: { twitter: "https://x.com/paper" },
+        name: "Paper",
+        symbol: "PAPER",
+      }),
+    );
+    const pos = e.positions.get(mint);
+    assert.ok(pos);
+    assert.notEqual(pos!.phase, "CLOSED");
+    assert.ok(e.logs.some((l) => l.level === "BUY" && l.reason === "paper_any_socials"));
+  });
+
+  it("live ignores paper-any-socials and still requires the allow-list", () => {
+    const e = engine({ dry_run: false, live: true, dry_run_any_socials: true });
+    e.onCreate(create({ creator: OTHER_CREATOR, symbol: "XYZ", name: "Xyz" }));
+    e.onSnapshot(snap(e, "MintBiz111111111111111111111111111111111", 5600, { creator: OTHER_CREATOR }));
+    assert.ok(e.logs.some((l) => l.reason === "not_on_allowlist"));
     assert.ok(!e.logs.some((l) => l.level === "BUY"));
   });
 

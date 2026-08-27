@@ -30,7 +30,7 @@ export function LiveTape() {
       <div className="min-h-0 flex-1 overflow-auto">
         {!running && rows.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted text-pretty">
-            Press Start. The desk watches live Pump.fun creates and only buys trusted DEV wallets.
+            Press Start. Dry-run can paper-fill any Pump.fun coin with socials. Live only buys trusted DEV wallets.
           </p>
         ) : rows.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted">Listening for creates…</p>

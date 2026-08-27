@@ -2,11 +2,15 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
+import { Switch } from "@/components/ui/switch.tsx";
+import { Label } from "@/components/ui/label.tsx";
 import { useBotStore } from "@/store/bot-store.ts";
 
 export function TrustedDevs() {
   const tick = useBotStore((s) => s.tick);
   const engine = useBotStore((s) => s.engine);
+  const config = useBotStore((s) => s.config);
+  const setConfigField = useBotStore((s) => s.setConfigField);
   const addDevWallets = useBotStore((s) => s.addDevWallets);
   const removeDevWallet = useBotStore((s) => s.removeDevWallet);
   const [draft, setDraft] = useState("");
@@ -14,6 +18,7 @@ export function TrustedDevs() {
   void tick;
 
   const entries = engine.allow.entries;
+  const paperOpen = config.dry_run && config.dry_run_any_socials && !config.live;
 
   function add() {
     const n = addDevWallets(draft);
@@ -31,11 +36,27 @@ export function TrustedDevs() {
         <div>
           <h2 className="text-sm font-medium text-fg">Trusted DEV wallets</h2>
           <p className="mt-1 text-sm text-muted text-pretty">
-            Coins created by these wallets can be bought. Everyone else is skipped.
+            {paperOpen
+              ? "Paper mode: any Pump.fun coin with socials can fill. Live still only buys these wallets."
+              : "Coins created by these wallets can be bought. Everyone else is skipped."}
           </p>
         </div>
         <span className="font-mono text-xs tabular-nums text-subtle">{entries.length}</span>
       </div>
+
+      <Label className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-bg px-3 py-2.5">
+        <span>
+          <span className="block text-sm text-fg">Paper any coin with socials</span>
+          <span className="mt-0.5 block text-xs text-subtle">
+            Dry-run only. Skip waiting on DEVs — still respects skip-mcap, ticket size, max open. Live ignores this.
+          </span>
+        </span>
+        <Switch
+          checked={paperOpen}
+          disabled={!config.dry_run}
+          onCheckedChange={(v) => setConfigField("dry_run_any_socials", v)}
+        />
+      </Label>
 
       <form
         className="mt-3 flex flex-col gap-2"
@@ -63,7 +84,11 @@ export function TrustedDevs() {
       </form>
 
       {entries.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">None yet. Add a creator before Start.</p>
+        <p className="mt-4 text-sm text-muted">
+          {paperOpen
+            ? "No trusted DEVs yet — fine for paper. Add them before you arm live."
+            : "None yet. Add a creator before Start, or turn on paper-any-socials for dry-run."}
+        </p>
       ) : (
         <ul className="mt-4 flex flex-col gap-2">
           {entries.map((e) => (
@@ -79,9 +104,9 @@ export function TrustedDevs() {
                 type="button"
                 className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-fg"
                 onClick={() => removeDevWallet(e.original)}
-                aria-label={`Remove ${e.original}`}
+                aria-label="Remove wallet"
               >
-                <X className="size-4" />
+                <X className="size-3.5" />
               </button>
             </li>
           ))}

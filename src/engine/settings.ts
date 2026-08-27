@@ -4,6 +4,7 @@ export type { BotConfig };
 export const DEFAULT_CONFIG: BotConfig = {
   dry_run: true,
   live: false,
+  dry_run_any_socials: true,
   rpc_url: "https://solana-rpc.publicnode.com",
   ws_url: "",
   ticket_sol: 0.05,
@@ -54,6 +55,13 @@ export const CONFIG_META: {
 }[] = [
   { key: "dry_run", label: "Dry run", group: "mode", kind: "bool", hint: "Full logic, no real transactions" },
   { key: "live", label: "Live flag", group: "mode", kind: "bool", hint: "Also requires typing I UNDERSTAND" },
+  {
+    key: "dry_run_any_socials",
+    label: "Paper any coin with socials",
+    group: "mode",
+    kind: "bool",
+    hint: "Dry-run only. Fills any Pump.fun create that has socials so you can test exits without waiting on DEVs. Live always uses the trusted list.",
+  },
   { key: "rpc_url", label: "RPC URL", group: "mode", kind: "string", hint: "Fallback only. HELIUS_API_KEY on Vercel wins." },
   { key: "ws_url", label: "WebSocket URL", group: "mode", kind: "string", hint: "Optional. Creates are polled from Pump.fun HTTP." },
   { key: "key_file", label: "Key file path", group: "mode", kind: "string", hint: "Never logged. Prefer BOT_PRIVATE_KEY env." },

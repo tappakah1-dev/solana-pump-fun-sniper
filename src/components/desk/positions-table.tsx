@@ -27,8 +27,9 @@ export function PositionsTable() {
       <div className="flex h-full min-h-48 flex-col justify-center rounded-xl border border-border bg-surface px-5 py-8">
         <div className="text-sm font-medium text-fg">No tickets</div>
         <p className="mt-1 max-w-prose text-sm text-muted text-pretty">
-          Add trusted DEV wallets, set buy size, then press Start. The desk only buys those creators
-          against live Pump.fun mcap — never the create print, never a chase above skip mcap.
+          Add trusted DEV wallets (needed for live), set buy size, then press Start. Dry-run can
+          paper-fill any coin with socials so you can test exits without waiting on a DEV. Never
+          chasing above skip mcap.
         </p>
       </div>
     );
