@@ -170,6 +170,143 @@ describe("flat / dump kill", () => {
   });
 });
 
+describe("flatline dead band", () => {
+  it("stuck at 3.5k for 25s in shakeout → sell 100%", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 20_000);
+    e.onSnapshot(snap(e, pos.mint, 3500));
+    let p = e.positions.get(pos.mint)!;
+    assert.notEqual(p.phase, "CLOSED");
+    assert.ok(e.logs.some((l) => l.reason === "flatline_start"));
+    e.setNow(ORIGIN + 45_000);
+    e.onSnapshot(snap(e, pos.mint, 3500));
+    p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.ok(e.logs.some((l) => l.reason === "flatline_stuck"));
+  });
+
+  it("wiggling inside the 3k–4k band still counts as stuck", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 20_000);
+    e.onSnapshot(snap(e, pos.mint, 3500));
+    e.setNow(ORIGIN + 27_000);
+    e.onSnapshot(snap(e, pos.mint, 3800));
+    e.setNow(ORIGIN + 34_000);
+    e.onSnapshot(snap(e, pos.mint, 3200));
+    e.setNow(ORIGIN + 41_000);
+    e.onSnapshot(snap(e, pos.mint, 3600));
+    e.setNow(ORIGIN + 48_000);
+    e.onSnapshot(snap(e, pos.mint, 3400));
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.ok(e.logs.some((l) => l.reason === "flatline_stuck"));
+  });
+
+  it("escaping above the band resets the flatline timer", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 20_000);
+    e.onSnapshot(snap(e, pos.mint, 3500));
+    e.setNow(ORIGIN + 40_000);
+    e.onSnapshot(snap(e, pos.mint, 3500));
+    e.setNow(ORIGIN + 41_000);
+    e.onSnapshot(snap(e, pos.mint, 5000));
+    let p = e.positions.get(pos.mint)!;
+    assert.equal(p.flatline_started_ts, null);
+    assert.notEqual(p.phase, "CLOSED");
+    e.setNow(ORIGIN + 60_000);
+    e.onSnapshot(snap(e, pos.mint, 3500));
+    e.setNow(ORIGIN + 80_000);
+    e.onSnapshot(snap(e, pos.mint, 3500));
+    p = e.positions.get(pos.mint)!;
+    assert.notEqual(p.phase, "CLOSED");
+    e.setNow(ORIGIN + 86_000);
+    e.onSnapshot(snap(e, pos.mint, 3500));
+    p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.ok(e.logs.some((l) => l.reason === "flatline_stuck"));
+  });
+
+  it("stuck at 3.5k in seek-rent before rent arms → sell 100%", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 135_000);
+    e.onSnapshot(snap(e, pos.mint, 5600));
+    let p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "SEEK_RENT");
+    e.setNow(ORIGIN + 140_000);
+    e.onSnapshot(snap(e, pos.mint, 3500));
+    e.setNow(ORIGIN + 165_000);
+    e.onSnapshot(snap(e, pos.mint, 3500));
+    p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.ok(e.logs.some((l) => l.reason === "flatline_stuck"));
+  });
+});
+
+describe("rent tag during shakeout", () => {
+  it("2.1× during shakeout → SEEK_RENT now, peel fires on next tick", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    let p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "SHAKEOUT");
+    e.setNow(ORIGIN + 30_000);
+    e.onSnapshot(snap(e, pos.mint, 11800));
+    p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "SEEK_RENT");
+    assert.ok(e.logs.some((l) => l.reason === "rent_tag_in_shakeout"));
+    e.setNow(ORIGIN + 31_000);
+    e.onSnapshot(snap(e, pos.mint, 11800));
+    p = e.positions.get(pos.mint)!;
+    assert.equal(p.did_rent_peel, true);
+    assert.equal(p.rent_armed, true);
+    assert.ok(Math.abs(p.tokens_left / p.tokens_bought - 0.8) < 1e-6);
+  });
+
+  it("gapped to 3.5× during shakeout → cap banks 50% initials and goes STUB", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 40_000);
+    e.onSnapshot(snap(e, pos.mint, 19600));
+    let p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "SEEK_RENT");
+    e.setNow(ORIGIN + 41_000);
+    e.onSnapshot(snap(e, pos.mint, 19600));
+    p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "STUB");
+    assert.equal(p.did_rent, true);
+    assert.equal(p.did_trim_3x, true);
+    assert.ok(Math.abs(p.tokens_left / p.tokens_bought - 0.5) < 1e-6);
+    assert.ok(e.logs.some((l) => l.reason === "rent_110"));
+  });
+
+  it("below the tag during shakeout → stays in shakeout, no early jump", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 60_000);
+    e.onSnapshot(snap(e, pos.mint, 7000));
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "SHAKEOUT");
+    assert.ok(!e.logs.some((l) => l.reason === "rent_tag_in_shakeout"));
+  });
+});
+
 describe("open ignore", () => {
   it("first 10s dev sell → no flatten", () => {
     const e = engine();

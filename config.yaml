@@ -22,6 +22,8 @@ flat_kill_seconds: 20
 flat_kill_multiple: 1.05
 dead_mcap: 3000
 hard_death_from_fill_pct: 0.55
+flatline_mcap_max: 4000
+flatline_seconds: 25
 rent_profit_pct: 1.10
 rent_sell_fraction: 0.50
 rent_peel_fraction: 0.20

@@ -63,6 +63,9 @@ export interface BotConfig {
   flat_kill_multiple: number;
   dead_mcap: number;
   hard_death_from_fill_pct: number;
+  /** Top of the dead band: stuck between `dead_mcap` and this for `flatline_seconds` → sell all. */
+  flatline_mcap_max: number;
+  flatline_seconds: number;
   rent_profit_pct: number;
   rent_sell_fraction: number;
   rent_peel_fraction: number;
@@ -142,6 +145,8 @@ export interface Position {
   sell_sol: number;
   below_base_bars: number;
   dead_mcap_bars: number;
+  /** Set when mcap first enters the dead band (dead_mcap..flatline_mcap_max). Reset when it leaves. */
+  flatline_started_ts: number | null;
   socials: Socials;
   last_action: string;
   last_mcap: number;
@@ -290,6 +295,7 @@ export function emptyPosition(partial: Partial<Position> & Pick<Position, "mint"
     sell_sol: 0,
     below_base_bars: 0,
     dead_mcap_bars: 0,
+    flatline_started_ts: null,
     socials: {},
     last_action: "",
     last_mcap: 0,

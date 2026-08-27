@@ -106,6 +106,9 @@ Flatten only if:
 
 - mcap falls under `dead_mcap` and stays there, or
 - mcap < `fill_mcap * (1 - hard_death_from_fill_pct)` (default 55% below fill), or
+- mcap flatlines in the dead band (`dead_mcap` → `flatline_mcap_max`, default
+  3k–4k) for `flatline_seconds` (default 25) without escaping above it —
+  `flatline_stuck`, sell 100%. The timer resets on any escape above the band, or
 - liquidity/pool is gone **and the coin has not graduated**, or
 - DEV sell **after** `dev_sell_ignore_seconds` (default 120)
 
@@ -114,6 +117,12 @@ position and sells on the new pool.
 
 Otherwise stay. At the end, set `base_low` to a robust low of this window
 (not a single 1s tick). That shelf is later stub invalidation.
+
+**Exception — rent tag:** if mcap prints `fill × (1 + rent_profit_pct)` (2.1×)
+during shakeout, the desk jumps to SEEK_RENT immediately (`rent_tag_in_shakeout`)
+with `base_low` from the samples so far. The open is over and the tag is live —
+we do not watch a 2.1×–3.5× print come and go while the shakeout clock runs out.
+Next tick the rent agent peels / trails / caps as usual.
 
 ### Phase 2 — SEEK_RENT (trailing initials)
 
@@ -133,8 +142,10 @@ cancelled** — 50% of the original bag will be sold. Only the print is flexible
    double-clip.
 
 If 2.1× has not tagged by `no_rent_timeout_seconds` (default 600): sell 100%,
-reason `DEAD_NO_RENT`. Once rent is armed, that timeout does not flatten —
-the trail or the cap will.
+reason `DEAD_NO_RENT`. Before rent arms, the dead-band flatline rule still
+applies — stuck in the 3k–4k band for `flatline_seconds` sells 100%
+(`flatline_stuck`) instead of waiting for the timeout. Once rent is armed,
+the flatline does not fire — the trail or the cap will.
 
 THINK lines show peel / hold trail / giveback / cap.
 

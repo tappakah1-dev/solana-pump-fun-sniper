@@ -394,6 +394,97 @@ function maybeFlatKill(pos: Position, snap: MarketSnapshot, input: DecideInput):
   ];
 }
 
+/**
+ * Dead-band flatline: mcap stuck between `dead_mcap` and `flatline_mcap_max`
+ * for `flatline_seconds` → sell 100%. The timer starts on first band touch
+ * and resets as soon as mcap escapes above the band (below it, `dead_mcap`
+ * already kills). Rented positions are handled by the trail, never this.
+ */
+function maybeFlatline(
+  pos: Position,
+  snap: MarketSnapshot,
+  input: DecideInput,
+  baseFields: Partial<Position>,
+): Intent[] | null {
+  const cfg = input.config;
+  if (pos.did_rent || pos.rent_armed) return null;
+  const inBand = snap.mcap > cfg.dead_mcap && snap.mcap <= cfg.flatline_mcap_max;
+
+  if (!inBand) {
+    if (pos.flatline_started_ts == null) return null;
+    return [
+      annotate(
+        {
+          kind: "PATCH",
+          level: "INFO",
+          reason: "flatline_reset",
+          msg: `flatline reset mcap=${Math.round(snap.mcap)} left the dead band`,
+          fields: { ...baseFields, flatline_started_ts: null },
+        },
+        pos,
+        snap,
+      ),
+    ];
+  }
+
+  const started = pos.flatline_started_ts ?? input.now;
+  const secs = (input.now - started) / 1000;
+  if (pos.flatline_started_ts == null) {
+    return [
+      annotate(
+        log({
+          level: "INFO",
+          reason: "flatline_start",
+          msg: `flatline mcap=${Math.round(snap.mcap)} dead band ${cfg.dead_mcap}–${cfg.flatline_mcap_max} sell_all_in=${cfg.flatline_seconds}s`,
+        }),
+        pos,
+        snap,
+      ),
+      annotate(
+        {
+          kind: "PATCH",
+          level: "INFO",
+          reason: "flatline_tick",
+          msg: "flatline",
+          fields: { ...baseFields, flatline_started_ts: started },
+        },
+        pos,
+        snap,
+      ),
+    ];
+  }
+
+  if (secs < cfg.flatline_seconds) {
+    return [
+      annotate(
+        {
+          kind: "PATCH",
+          level: "INFO",
+          reason: "flatline_tick",
+          msg: `flatline ${Math.round(secs)}s/${cfg.flatline_seconds}s`,
+          fields: baseFields,
+        },
+        pos,
+        snap,
+      ),
+    ];
+  }
+
+  return [
+    annotate(
+      {
+        kind: "SELL_ALL",
+        level: "DEAD",
+        reason: "flatline_stuck",
+        msg: `DEAD flatline mcap=${Math.round(snap.mcap)} stuck=${Math.round(secs)}s in dead band sold=100%`,
+        fields: { ...baseFields, flatline_started_ts: null },
+      },
+      pos,
+      snap,
+    ),
+  ];
+}
+
 function handleOpenIgnore(pos: Position, snap: MarketSnapshot, input: DecideInput): Intent[] {
   const flat = maybeFlatKill(pos, snap, input);
   if (flat) return flat;
@@ -506,8 +597,42 @@ function handleShakeout(pos: Position, snap: MarketSnapshot, input: DecideInput)
     ];
   }
 
+  const flatline = maybeFlatline(pos, snap, input, { ...fields, dead_mcap_bars: deadBars });
+  if (flatline) return [...extra, ...flatline];
+
   const age = ageSec(pos, input.now);
   const shakeoutEnd = cfg.ignore_open_seconds + cfg.shakeout_seconds;
+
+  // Rent tag printed during shakeout — the open is over, so the desk takes
+  // profit now instead of waiting out the shakeout clock and watching the
+  // move fade. Next tick decideRent peels / trails / caps as usual.
+  const rentTag = pos.fill_mcap > 0 && snap.mcap >= pos.fill_mcap * (1 + cfg.rent_profit_pct);
+  if (rentTag) {
+    const base_low = robustLow(samples, shakeout_low);
+    return [
+      ...extra,
+      annotate(
+        {
+          kind: "SET_PHASE",
+          level: "SHAKE",
+          reason: "rent_tag_in_shakeout",
+          msg: `SHAKE rent tag ${(snap.mcap / pos.fill_mcap).toFixed(2)}× in shakeout → SEEK_RENT base_low=${Math.round(base_low)}`,
+          phase: "SEEK_RENT",
+          base_low,
+          fields: {
+            ...fields,
+            phase: "SEEK_RENT",
+            base_low,
+            last_reason: "rent_tag_in_shakeout",
+            last_action: "SEEK_RENT",
+          },
+        },
+        pos,
+        snap,
+      ),
+    ];
+  }
+
   if (age >= shakeoutEnd) {
     const base_low = robustLow(samples, shakeout_low);
     return [
@@ -566,6 +691,9 @@ function handleSeekRent(pos: Position, snap: MarketSnapshot, input: DecideInput)
   const dev = maybeDevSell(pos, snap, input);
   if (dev?.some((i) => i.kind === "SELL_ALL")) return dev;
   const extra = (dev ?? []).filter((i) => i.kind !== "SELL_ALL");
+
+  const flatline = maybeFlatline(pos, snap, input, fields);
+  if (flatline) return [...extra, ...flatline];
 
   if (!armed && age >= cfg.no_rent_timeout_seconds) {
     return [
