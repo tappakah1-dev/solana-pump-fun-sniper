@@ -12,6 +12,7 @@ import {
   fetchRecentCoins,
   fetchCoin,
   fetchTrades,
+  fetchSolPrice,
   executeSwap,
   fetchWalletBalance,
 } from "@/lib/pump/server.ts";
@@ -37,13 +38,17 @@ export interface LiveRunnerHooks {
 }
 
 let timer: ReturnType<typeof setTimeout> | null = null;
+let posTimer: ReturnType<typeof setTimeout> | null = null;
 let stopped = true;
 let inFlight = false;
+let posInFlight = false;
 const seen = new Set<string>();
 const prevUnique = new Map<string, number>();
 const prevDev = new Map<string, number>();
 let consecutiveErrors = 0;
 let coinsSeen = 0;
+let solUsd = 0;
+let solUsdAt = 0;
 
 function makeTransport(getEngine: () => BotEngine, getSession?: () => string | undefined): SwapTransport {
   return {
@@ -75,9 +80,25 @@ async function refreshWallet(engine: BotEngine) {
   }
 }
 
+async function refreshSolPrice() {
+  if (Date.now() - solUsdAt < 15_000 && solUsd > 0) return solUsd;
+  try {
+    const r = await fetchSolPrice();
+    if (r.usd > 0) {
+      solUsd = r.usd;
+      solUsdAt = Date.now();
+    }
+  } catch {
+    /* keep last */
+  }
+  return solUsd;
+}
+
 async function snapshotMint(engine: BotEngine, mint: string, coinHint?: PumpCoin): Promise<MarketSnapshot | null> {
-  const coin = coinHint ?? (await fetchCoin({ data: { mint } }));
-  const trades = await fetchTrades({ data: { mint, limit: 40 } });
+  const [coin, trades] = await Promise.all([
+    coinHint ? Promise.resolve(coinHint) : fetchCoin({ data: { mint } }),
+    fetchTrades({ data: { mint, limit: 40 } }).catch(() => [] as Awaited<ReturnType<typeof fetchTrades>>),
+  ]);
   const now = Date.now();
   const snap = snapshotFromMarket({
     coin,
@@ -86,6 +107,7 @@ async function snapshotMint(engine: BotEngine, mint: string, coinHint?: PumpCoin
     smartHas: (a) => engine.smart.has(a),
     prevUnique: prevUnique.get(mint),
     prevDevBalance: prevDev.get(mint),
+    solUsd,
   });
   prevUnique.set(mint, snap.unique_buyers);
   prevDev.set(mint, snap.dev_token_balance);
@@ -124,6 +146,7 @@ async function tick(hooks: LiveRunnerHooks) {
   inFlight = true;
   const engine = hooks.getEngine();
   try {
+    await refreshSolPrice();
     if (engine.isLiveArmed() && engine.hasKeyLoaded()) {
       engine.swap = new LiveSwapAdapter(
         () => resolveRpc(engine.config.rpc_url),
@@ -184,20 +207,7 @@ async function tick(hooks: LiveRunnerHooks) {
         engine.onSnapshot(snap);
         await engine.settleUnsettled();
         hooks.setMcap(coin.mint, snap.mcap);
-      }
-    }
-
-    for (const pos of engine.positionList()) {
-      if (pos.phase === "CLOSED") continue;
-      try {
-        const snap = await snapshotMint(engine, pos.mint);
-        if (!snap) continue;
-        engine.setNow(Date.now());
-        engine.onSnapshot(snap);
-        await engine.settleUnsettled();
-        hooks.setMcap(pos.mint, snap.mcap);
-      } catch {
-        /* keep going */
+        hooks.bump();
       }
     }
 
@@ -221,6 +231,44 @@ async function tick(hooks: LiveRunnerHooks) {
   }
 }
 
+async function tickPositions(hooks: LiveRunnerHooks) {
+  if (stopped || posInFlight) return;
+  posInFlight = true;
+  const engine = hooks.getEngine();
+  try {
+    await refreshSolPrice();
+    const open = engine.positionList().filter((p) => p.phase !== "CLOSED" && p.phase !== "DETECTED");
+    const fetched = await Promise.all(
+      open.map(async (pos) => {
+        try {
+          const snap = await snapshotMint(engine, pos.mint);
+          return { mint: pos.mint, snap };
+        } catch {
+          return { mint: pos.mint, snap: null };
+        }
+      }),
+    );
+    for (const { mint, snap } of fetched) {
+      if (!snap || snap.mcap <= 0) continue;
+      engine.setNow(Date.now());
+      engine.onSnapshot(snap);
+      await engine.settleUnsettled();
+      hooks.setMcap(mint, snap.mcap);
+    }
+    if (fetched.some((f) => f.snap)) {
+      hooks.setStatus({ lastPoll: Date.now(), listenerError: null });
+      hooks.bump();
+    }
+  } catch {
+    /* discovery loop reports listener errors */
+  } finally {
+    posInFlight = false;
+    if (!stopped) {
+      posTimer = setTimeout(() => void tickPositions(hooks), 1000);
+    }
+  }
+}
+
 export function startLiveRunner(hooks: LiveRunnerHooks) {
   stopLiveRunner();
   stopped = false;
@@ -229,6 +277,7 @@ export function startLiveRunner(hooks: LiveRunnerHooks) {
   engine.listenerConnected = true;
   engine.setNow(Date.now());
   void tick(hooks);
+  void tickPositions(hooks);
 }
 
 export function stopLiveRunner() {
@@ -236,6 +285,10 @@ export function stopLiveRunner() {
   if (timer) {
     clearTimeout(timer);
     timer = null;
+  }
+  if (posTimer) {
+    clearTimeout(posTimer);
+    posTimer = null;
   }
 }
 

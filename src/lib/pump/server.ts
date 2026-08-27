@@ -22,7 +22,8 @@ async function getJson(url: string, timeoutMs = 12_000): Promise<unknown> {
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { accept: "application/json" },
+      cache: "no-store",
+      headers: { accept: "application/json", "cache-control": "no-cache" },
     });
     if (!res.ok) throw new Error(`http_${res.status}`);
     return await res.json();
@@ -36,7 +37,7 @@ export const fetchRecentCoins = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const limit = data.limit ?? 40;
     const json = await getJson(
-      `${PUMP_COINS}/coins?offset=0&limit=${limit}&sort=created_timestamp&order=DESC&includeNsfw=false`,
+      `${PUMP_COINS}/coins?offset=0&limit=${limit}&sort=created_timestamp&order=DESC&includeNsfw=false&_=${Date.now()}`,
     );
     const list = Array.isArray(json) ? json : [];
     return list as PumpCoin[];
@@ -45,7 +46,7 @@ export const fetchRecentCoins = createServerFn({ method: "POST" })
 export const fetchCoin = createServerFn({ method: "POST" })
   .validator(z.object({ mint: z.string().min(32).max(48) }))
   .handler(async ({ data }) => {
-    const json = await getJson(`${PUMP_COINS}/coins/${encodeURIComponent(data.mint)}`);
+    const json = await getJson(`${PUMP_COINS}/coins/${encodeURIComponent(data.mint)}?_=${Date.now()}`);
     if (!json || typeof json !== "object") throw new Error("coin_not_found");
     return json as PumpCoin;
   });
@@ -55,10 +56,23 @@ export const fetchTrades = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const limit = data.limit ?? 40;
     const json = (await getJson(
-      `${PUMP_TRADES}/v2/coins/${encodeURIComponent(data.mint)}/trades?limit=${limit}`,
+      `${PUMP_TRADES}/v2/coins/${encodeURIComponent(data.mint)}/trades?limit=${limit}&_=${Date.now()}`,
     )) as { trades?: PumpTrade[] };
     return Array.isArray(json?.trades) ? json.trades : [];
   });
+
+export const fetchSolPrice = createServerFn({ method: "POST" }).handler(async () => {
+  try {
+    const json = (await getJson(`${PUMP_COINS}/sol-price?_=${Date.now()}`, 6_000)) as {
+      solPrice?: number;
+      price?: number;
+    };
+    const n = Number(json?.solPrice ?? json?.price);
+    return { usd: Number.isFinite(n) && n > 0 ? n : 0 };
+  } catch {
+    return { usd: 0 };
+  }
+});
 
 export const rpcCall = createServerFn({ method: "POST" })
   .validator(

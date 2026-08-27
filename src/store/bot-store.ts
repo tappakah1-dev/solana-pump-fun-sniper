@@ -221,7 +221,7 @@ export const useBotStore = create<BotState>((set, get) => {
         getEngine: () => get().engine,
         bump: () => get().bump(),
         setMcap: (mint, mcap) => {
-          set((s) => ({ mcaps: { ...s.mcaps, [mint]: mcap } }));
+          set((s) => ({ mcaps: { ...s.mcaps, [mint]: mcap }, tick: s.tick + 1 }));
         },
         setStatus: (s) => {
           set((prev) => ({
@@ -550,7 +550,9 @@ export const useBotStore = create<BotState>((set, get) => {
         .positionList()
         .filter((pos) => isOpenPhase(pos.phase))
         .map((pos) => {
-        const nowMcap = mcaps[pos.mint] ?? (pos.mint === replayMint ? mcapSlider : pos.local_high || pos.fill_mcap);
+        const nowMcap =
+          mcaps[pos.mint] ??
+          (pos.mint === replayMint ? mcapSlider : pos.last_mcap || pos.fill_mcap);
         const leftover = leftoverValueSol(pos, nowMcap);
         const costLeft = pos.fill_sol * (pos.tokens_left / (pos.tokens_bought || 1));
         return {

@@ -62,6 +62,7 @@ function patchFromSnap(pos: Position, snap: MarketSnapshot): Partial<Position> {
     venue,
     mcap_trail: trail,
     stall_bars: stall,
+    last_mcap: snap.mcap,
   };
 }
 

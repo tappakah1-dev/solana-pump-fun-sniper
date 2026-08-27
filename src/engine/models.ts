@@ -144,6 +144,7 @@ export interface Position {
   dead_mcap_bars: number;
   socials: Socials;
   last_action: string;
+  last_mcap: number;
 }
 
 export interface TokenCreate {
@@ -291,6 +292,7 @@ export function emptyPosition(partial: Partial<Position> & Pick<Position, "mint"
     dead_mcap_bars: 0,
     socials: {},
     last_action: "",
+    last_mcap: 0,
     ...partial,
   };
 }

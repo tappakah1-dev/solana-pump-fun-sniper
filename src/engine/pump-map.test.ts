@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { coinToCreate, snapshotFromMarket, type PumpCoin, type PumpTrade } from "./pump-map.ts";
+import { coinToCreate, coinMcapUsd, snapshotFromMarket, type PumpCoin, type PumpTrade } from "./pump-map.ts";
 
 const coin: PumpCoin = {
   mint: "Mint111111111111111111111111111111111111111",
@@ -23,6 +23,21 @@ describe("pump-map", () => {
     assert.equal(c.socials.twitter, coin.twitter);
     assert.equal(c.socials.website, coin.website);
     assert.equal(c.mcap, 5600);
+  });
+
+  it("prefers bonding-curve reserves over a stale usd_market_cap", () => {
+    const n = coinMcapUsd(
+      {
+        ...coin,
+        usd_market_cap: 6030,
+        virtual_sol_reserves: 30_000_000_000,
+        virtual_token_reserves: 1_000_000_000_000_000,
+        total_supply: 1_000_000_000_000_000,
+      },
+      150,
+    );
+    assert.ok(n > 4000);
+    assert.ok(Math.abs(n - 4500) < 1);
   });
 
   it("complete coin → graduated PumpSwap, not liquidity_gone", () => {

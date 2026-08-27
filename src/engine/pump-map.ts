@@ -19,6 +19,7 @@ export interface PumpCoin {
   bonding_curve?: string | null;
   virtual_sol_reserves?: number | null;
   virtual_token_reserves?: number | null;
+  total_supply?: number | null;
   is_cashback_enabled?: boolean | null;
   image_uri?: string | null;
   pump_swap_pool?: string | null;
@@ -38,7 +39,14 @@ export function createdTsMs(ts: number): number {
   return ts < 1e12 ? ts * 1000 : ts;
 }
 
-export function coinMcapUsd(coin: PumpCoin): number {
+export function coinMcapUsd(coin: PumpCoin, solUsd?: number): number {
+  const vs = Number(coin.virtual_sol_reserves);
+  const vt = Number(coin.virtual_token_reserves);
+  const supply = Number(coin.total_supply) || 1_000_000_000_000_000;
+  if (solUsd && solUsd > 0 && vs > 0 && vt > 0 && supply > 0) {
+    const fromCurve = (vs / 1e9) * (supply / vt) * solUsd;
+    if (Number.isFinite(fromCurve) && fromCurve > 0) return fromCurve;
+  }
   const v = coin.usd_market_cap ?? coin.market_cap_usd;
   if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
   return 0;
@@ -89,6 +97,7 @@ export interface SnapshotInput {
   prevUnique?: number;
   prevDevBalance?: number;
   devTokenBalance?: number;
+  solUsd?: number;
 }
 
 export function snapshotFromMarket(input: SnapshotInput): MarketSnapshot {
@@ -130,7 +139,7 @@ export function snapshotFromMarket(input: SnapshotInput): MarketSnapshot {
   return {
     ts: now,
     mint: input.coin.mint,
-    mcap: coinMcapUsd(input.coin),
+    mcap: coinMcapUsd(input.coin, input.solUsd),
     unique_buyers: unique,
     unique_buyers_prev: input.prevUnique ?? unique,
     buy_sol: buySol,
