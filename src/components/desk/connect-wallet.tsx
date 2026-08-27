@@ -26,7 +26,7 @@ export function ConnectWallet() {
           <h2 className="text-sm font-medium text-fg">Operator wallet</h2>
           <p className="mt-1 text-sm text-muted text-pretty">
             {required
-              ? "Only wallets in OPERATOR_WHITELIST can Start or arm live. Sign a nonce — the bot key stays on the server."
+              ? "Only wallets in OPERATOR_WHITELIST can Start. Phantom must be on Solana (not Ethereum). Sign a nonce — the bot key stays on the server."
               : "No whitelist set. Anyone with this URL can dry-run. Set OPERATOR_WHITELIST on Vercel to lock the desk."}
           </p>
         </div>

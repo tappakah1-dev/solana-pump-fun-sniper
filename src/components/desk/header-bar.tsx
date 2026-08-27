@@ -84,7 +84,7 @@ export function HeaderBar() {
             Stop
           </Button>
         ) : (
-          <Button onClick={start} disabled={operatorLocked} title={operatorLocked ? "Connect a whitelisted wallet first" : undefined}>
+          <Button onClick={start} disabled={operatorLocked} title={operatorLocked ? "Connect the whitelisted Phantom first (Solana network)" : undefined}>
             <Play className="size-3.5" />
             Start
           </Button>

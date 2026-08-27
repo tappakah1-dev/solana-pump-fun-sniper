@@ -15,8 +15,8 @@ export function LiveTape() {
   const rows = useMemo(() => feed, [feed]);
 
   return (
-    <section className="flex min-h-56 flex-col overflow-hidden rounded-xl border border-border bg-surface">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
+    <section className="flex h-[22rem] min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
         <h2 className="text-xs font-medium uppercase tracking-[0.14em] text-subtle">Pump.fun tape</h2>
         <div className="flex-1" />
         <span className="font-mono text-[10px] tabular-nums text-muted">
@@ -54,8 +54,10 @@ export function LiveTape() {
                   <td className="px-3 py-2 text-muted">{shortAddr(r.creator, 4)}</td>
                   <td className="px-3 py-2">{fmtMcap(r.mcap)}</td>
                   <td className="px-3 py-2">
-                    {r.allow ? (
+                    {r.tag === "buy" ? (
                       <Badge variant="ok">buy</Badge>
+                    ) : r.tag === "paper" ? (
+                      <Badge variant="dry">paper</Badge>
                     ) : (
                       <Badge variant="default">skip</Badge>
                     )}

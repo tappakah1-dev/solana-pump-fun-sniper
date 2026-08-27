@@ -20,11 +20,11 @@ import {
 } from "@/engine/replay.ts";
 import { syntheticSnapshot } from "@/engine/market.ts";
 import type { LogEvent, Position } from "@/engine/models.ts";
-import { leftoverValueSol } from "@/engine/models.ts";
+import { leftoverValueSol, isOpenPhase } from "@/engine/models.ts";
 import { startLiveRunner, stopLiveRunner } from "@/engine/live-runner.ts";
 import { walletStatus, operatorStatus, operatorChallenge, operatorVerify } from "@/lib/pump/server.ts";
 import type { TapeRow } from "@/engine/pump-map.ts";
-import { getInjectedWallet, pubkeyOf, signOperatorMessage } from "@/lib/solana-wallet.ts";
+import { listInjectedWallets, connectInjected, signOperatorMessage, explainWalletError } from "@/lib/solana-wallet.ts";
 
 const LS_ALLOW = "allow-exec-devs-v2";
 const LS_SMART = "allow-exec-smart-v1";
@@ -308,42 +308,52 @@ export const useBotStore = create<BotState>((set, get) => {
       }
     },
     connectOperator: async () => {
-      const provider = getInjectedWallet();
-      if (!provider) {
-        set({ operatorError: "No Solana wallet found. Install Phantom or Solflare." });
+      const providers = listInjectedWallets();
+      if (!providers.length) {
+        set({
+          operatorError:
+            "No Solana wallet found. Install Phantom or Solflare, unlock it, and refresh. If MetaMask is also installed, disable it on this tab.",
+        });
         get().bump();
         return;
       }
-      try {
-        await provider.connect();
-        const pubkey = pubkeyOf(provider);
-        if (!pubkey) {
-          set({ operatorError: "Wallet did not return a public key" });
+      let lastErr = "";
+      for (const provider of providers) {
+        try {
+          const pubkey = await connectInjected(provider);
+          if (!pubkey) {
+            lastErr = "Wallet did not return a public key";
+            continue;
+          }
+          const ch = await operatorChallenge({ data: { pubkey } });
+          if (!ch.ok) {
+            set({
+              operatorError:
+                ch.error === "wallet_not_whitelisted"
+                  ? `Connected ${pubkey.slice(0, 4)}…${pubkey.slice(-4)} is not on OPERATOR_WHITELIST. Use the same Phantom you listed, or add this address on Vercel.`
+                  : ch.error || "challenge failed",
+            });
+            get().bump();
+            return;
+          }
+          const signatureB58 = await signOperatorMessage(provider, ch.message);
+          const verified = await operatorVerify({ data: { pubkey, message: ch.message, signatureB58 } });
+          if (!verified.ok) {
+            set({ operatorError: verified.error || "signature rejected" });
+            get().bump();
+            return;
+          }
+          writeSs(SS_OPERATOR, verified.session);
+          set({ operatorSession: verified.session, operatorPubkey: verified.pubkey, operatorError: "" });
+          info(get().engine, "operator_connected", `operator ${pubkey.slice(0, 4)}… connected`);
           get().bump();
           return;
+        } catch (e) {
+          lastErr = explainWalletError(e);
         }
-        const ch = await operatorChallenge({ data: { pubkey } });
-        if (!ch.ok) {
-          set({ operatorError: ch.error === "wallet_not_whitelisted" ? "Wallet is not on OPERATOR_WHITELIST" : ch.error || "challenge failed" });
-          get().bump();
-          return;
-        }
-        const signatureB58 = await signOperatorMessage(provider, ch.message);
-        const verified = await operatorVerify({ data: { pubkey, message: ch.message, signatureB58 } });
-        if (!verified.ok) {
-          set({ operatorError: verified.error || "signature rejected" });
-          get().bump();
-          return;
-        }
-        writeSs(SS_OPERATOR, verified.session);
-        set({ operatorSession: verified.session, operatorPubkey: verified.pubkey, operatorError: "" });
-        info(get().engine, "operator_connected", `operator ${pubkey.slice(0, 4)}… connected`);
-        get().bump();
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "wallet_connect_failed";
-        set({ operatorError: msg.slice(0, 160) });
-        get().bump();
       }
+      set({ operatorError: lastErr || "wallet_connect_failed" });
+      get().bump();
     },
     disconnectOperator: () => {
       writeSs(SS_OPERATOR, "");
@@ -536,7 +546,10 @@ export const useBotStore = create<BotState>((set, get) => {
 
     rows: () => {
       const { engine, mcaps, mcapSlider, replayMint } = get();
-      return engine.positionList().map((pos) => {
+      return engine
+        .positionList()
+        .filter((pos) => isOpenPhase(pos.phase))
+        .map((pos) => {
         const nowMcap = mcaps[pos.mint] ?? (pos.mint === replayMint ? mcapSlider : pos.local_high || pos.fill_mcap);
         const leftover = leftoverValueSol(pos, nowMcap);
         const costLeft = pos.fill_sol * (pos.tokens_left / (pos.tokens_bought || 1));

@@ -161,4 +161,5 @@ export interface TapeRow {
   allow: boolean;
   hasSocials: boolean;
   complete: boolean;
+  tag: "buy" | "paper" | "skip";
 }

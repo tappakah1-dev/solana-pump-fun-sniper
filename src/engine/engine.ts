@@ -210,6 +210,10 @@ export class BotEngine {
       const result = applyIntent(intent, this.config, this.now, this.risk, pos, snap, wallet);
       this.appendLogs(result.logs);
       if (result.position && mint) {
+        if (intent.kind === "SKIP" && (pos?.phase === "DETECTED" || result.position.phase === "DETECTED")) {
+          this.positions.delete(mint);
+          continue;
+        }
         this.positions.set(mint, result.position);
         this.maybeArmMoonbag(result.position, snap);
       }

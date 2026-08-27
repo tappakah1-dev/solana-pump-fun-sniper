@@ -21,11 +21,11 @@ export function Desk() {
   return (
     <div className="flex min-h-dvh flex-col bg-bg text-fg">
       <HeaderBar />
-      <div className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col gap-4 p-4 lg:p-5">
+      <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-4 p-4 lg:p-5">
         <ConnectWallet />
         <TrustedDevs />
         <MetricsPanel />
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4">
           <PositionsTable />
           <LiveTape />
         </div>

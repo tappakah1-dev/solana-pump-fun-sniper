@@ -92,7 +92,19 @@ async function snapshotMint(engine: BotEngine, mint: string, coinHint?: PumpCoin
   return snap;
 }
 
+function paperUniverse(engine: BotEngine): boolean {
+  const c = engine.config;
+  return Boolean(c.dry_run && c.dry_run_any_socials && !c.live);
+}
+
 function toTape(coin: PumpCoin, engine: BotEngine): TapeRow {
+  const allow = engine.allow.has(coin.creator);
+  const socials = hasSocials({
+    twitter: coin.twitter || undefined,
+    telegram: coin.telegram || undefined,
+    website: coin.website || undefined,
+  });
+  const paper = paperUniverse(engine) && socials && !allow;
   return {
     mint: coin.mint,
     name: coin.name || "TOKEN",
@@ -100,13 +112,10 @@ function toTape(coin: PumpCoin, engine: BotEngine): TapeRow {
     creator: coin.creator,
     mcap: coin.usd_market_cap ?? coin.market_cap_usd ?? 0,
     ts: coin.created_timestamp,
-    allow: engine.allow.has(coin.creator),
-    hasSocials: hasSocials({
-      twitter: coin.twitter || undefined,
-      telegram: coin.telegram || undefined,
-      website: coin.website || undefined,
-    }),
+    allow,
+    hasSocials: socials,
     complete: Boolean(coin.complete),
+    tag: allow ? "buy" : paper ? "paper" : "skip",
   };
 }
 
@@ -136,8 +145,11 @@ async function tick(hooks: LiveRunnerHooks) {
     hooks.setStatus({ feed: tape, lastPoll: Date.now(), listenerError: null, coinsSeen });
 
     const now = Date.now();
-    const RECENT = 3 * 60_000;
+    // Paper-any only takes brand-new creates so the first poll does not dump
+    // 3 minutes of Pump inventory into DETECTED. Trusted DEVs keep a longer window.
+    const PAPER_WINDOW = 45_000;
     const ALLOW_WINDOW = 12 * 60_000;
+    const paper = paperUniverse(engine);
 
     for (const coin of coins) {
       if (seen.has(coin.mint)) continue;
@@ -145,20 +157,33 @@ async function tick(hooks: LiveRunnerHooks) {
       coinsSeen += 1;
       const age = now - (coin.created_timestamp < 1e12 ? coin.created_timestamp * 1000 : coin.created_timestamp);
       const allow = engine.allow.has(coin.creator);
-      if (!allow && age > RECENT) continue;
-      if (allow && age > ALLOW_WINDOW) continue;
+      const socials = hasSocials({
+        twitter: coin.twitter || undefined,
+        telegram: coin.telegram || undefined,
+        website: coin.website || undefined,
+      });
+
+      let ingest = false;
+      if (allow && age <= ALLOW_WINDOW) ingest = true;
+      else if (
+        paper &&
+        socials &&
+        age <= PAPER_WINDOW &&
+        engine.openCount() < engine.config.max_open_positions
+      ) {
+        ingest = true;
+      }
+      if (!ingest) continue;
 
       engine.setNow(Date.now());
       engine.onCreate(coinToCreate(coin, Date.now()));
 
-      if (allow) {
-        const snap = await snapshotMint(engine, coin.mint, coin);
-        if (snap) {
-          engine.setNow(Date.now());
-          engine.onSnapshot(snap);
-          await engine.settleUnsettled();
-          hooks.setMcap(coin.mint, snap.mcap);
-        }
+      const snap = await snapshotMint(engine, coin.mint, coin);
+      if (snap) {
+        engine.setNow(Date.now());
+        engine.onSnapshot(snap);
+        await engine.settleUnsettled();
+        hooks.setMcap(coin.mint, snap.mcap);
       }
     }
 
