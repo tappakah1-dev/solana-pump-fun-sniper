@@ -17,6 +17,7 @@ const PRIMARY: Metric[] = [
   { key: "slippage_pct", label: "Slippage %" },
   { key: "jito_tip_sol", label: "Jito tip (SOL)", hint: "Attached to live txs, sent via Jito" },
   { key: "dev_sell_ignore_seconds", label: "DEV-sell ignore (s)", hint: "Sells in this window are not an exit" },
+  { key: "flat_kill_seconds", label: "Flat/dump sell (s)", hint: "No print or already red → sell 100%" },
   { key: "rent_peel_fraction", label: "Rent peel at +110%", hint: "Sold immediately at the tag" },
   { key: "rent_giveback_pct", label: "Rent giveback", hint: "Trail fires this far under the post-tag high" },
   { key: "rent_cap_multiple", label: "Rent cap (× fill)", hint: "Take remaining initials by this multiple" },

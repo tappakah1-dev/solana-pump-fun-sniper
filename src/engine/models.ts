@@ -58,6 +58,9 @@ export interface BotConfig {
   ignore_open_seconds: number;
   shakeout_seconds: number;
   dev_sell_ignore_seconds: number;
+  /** Flatten if still under this multiple after `flat_kill_seconds` (never printed). */
+  flat_kill_seconds: number;
+  flat_kill_multiple: number;
   dead_mcap: number;
   hard_death_from_fill_pct: number;
   rent_profit_pct: number;

@@ -18,6 +18,8 @@ skip_if_mcap_above: 12000
 ignore_open_seconds: 15
 shakeout_seconds: 120
 dev_sell_ignore_seconds: 120
+flat_kill_seconds: 20
+flat_kill_multiple: 1.05
 dead_mcap: 3000
 hard_death_from_fill_pct: 0.55
 rent_profit_pct: 1.10

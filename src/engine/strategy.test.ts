@@ -124,6 +124,52 @@ describe("allow-list entry", () => {
   });
 });
 
+describe("flat / dump kill", () => {
+  it("still at fill after 20s → sell 100%", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 20_000);
+    e.onSnapshot(snap(e, pos.mint, 5600));
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.ok(e.logs.some((l) => l.reason === "flat_kill"));
+  });
+
+  it("dropped below fill at 20s with no print → sell 100%", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 10_000);
+    e.onSnapshot(snap(e, pos.mint, 5200));
+    e.setNow(ORIGIN + 20_000);
+    e.onSnapshot(snap(e, pos.mint, 4800));
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.ok(e.logs.some((l) => l.reason === "dump_kill"));
+  });
+
+  it("printed above 1.05× before 20s → keep, even if it chops", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 8_000);
+    e.onSnapshot(snap(e, pos.mint, 7200));
+    e.setNow(ORIGIN + 20_000);
+    e.onSnapshot(snap(e, pos.mint, 5800));
+    const p = e.positions.get(pos.mint)!;
+    assert.notEqual(p.phase, "CLOSED");
+    assert.ok(!e.logs.some((l) => l.reason === "flat_kill" || l.reason === "dump_kill"));
+  });
+
+  it("t+10s still flat → do not sell yet", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 10_000);
+    e.onSnapshot(snap(e, pos.mint, 5600));
+    const p = e.positions.get(pos.mint)!;
+    assert.notEqual(p.phase, "CLOSED");
+    assert.ok(!e.logs.some((l) => l.reason === "flat_kill"));
+  });
+});
+
 describe("open ignore", () => {
   it("first 10s dev sell → no flatten", () => {
     const e = engine();
@@ -346,11 +392,13 @@ describe("timeouts and second dump", () => {
   it("ten DEV sells inside 2 min are not an exit", () => {
     const e = engine();
     const pos = buyAt(e, 6000);
+    e.setNow(ORIGIN + 8_000);
+    e.onSnapshot(snap(e, pos.mint, 7200, { dev_token_balance: 1_000_000_000 }));
     let bal = 1_000_000_000;
     for (let i = 1; i <= 10; i++) {
       bal = Math.floor(bal * 0.7);
       e.setNow(ORIGIN + i * 10_000);
-      e.onSnapshot(snap(e, pos.mint, 5500 + i * 50, { dev_token_balance: bal }));
+      e.onSnapshot(snap(e, pos.mint, 6500 + i * 40, { dev_token_balance: bal }));
     }
     const p = e.positions.get(pos.mint)!;
     assert.notEqual(p.phase, "CLOSED");

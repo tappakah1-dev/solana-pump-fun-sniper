@@ -362,7 +362,40 @@ function handleDetectedBuy(pos: Position, snap: MarketSnapshot, input: DecideInp
   return maybeBuy(create, snap.mcap, input);
 }
 
+function maybeFlatKill(pos: Position, snap: MarketSnapshot, input: DecideInput): Intent[] | null {
+  const cfg = input.config;
+  if (pos.did_rent || pos.rent_armed) return null;
+  const age = ageSec(pos, input.now);
+  if (age < cfg.flat_kill_seconds) return null;
+  // Only the first ~15s after the timer. Replay/time-jumps past this keep shakeout.
+  if (age > cfg.flat_kill_seconds + 15) return null;
+  if (!pos.fill_mcap) return null;
+  const peak = Math.max(pos.local_high, snap.mcap);
+  if (peak > pos.fill_mcap * cfg.flat_kill_multiple) return null;
+  const nowMult = snap.mcap / pos.fill_mcap;
+  const reason = nowMult < 1 ? "dump_kill" : "flat_kill";
+  const msg =
+    nowMult < 1
+      ? `DEAD dump_kill t+${Math.round(age)}s mcap=${Math.round(snap.mcap)} fill=${Math.round(pos.fill_mcap)} sold=100%`
+      : `DEAD flat_kill t+${Math.round(age)}s no print above ${cfg.flat_kill_multiple}× sold=100%`;
+  return [
+    annotate(
+      {
+        kind: "SELL_ALL",
+        level: "DEAD",
+        reason,
+        msg,
+        fields: patchFromSnap(pos, snap),
+      },
+      pos,
+      snap,
+    ),
+  ];
+}
+
 function handleOpenIgnore(pos: Position, snap: MarketSnapshot, input: DecideInput): Intent[] {
+  const flat = maybeFlatKill(pos, snap, input);
+  if (flat) return flat;
   const cfg = input.config;
   const intents: Intent[] = [];
   const fields = patchFromSnap(pos, snap);
@@ -427,6 +460,8 @@ function robustLow(samples: number[], fallback: number): number {
 }
 
 function handleShakeout(pos: Position, snap: MarketSnapshot, input: DecideInput): Intent[] {
+  const flat = maybeFlatKill(pos, snap, input);
+  if (flat) return flat;
   const cfg = input.config;
   const samples = [...pos.shakeout_samples, snap.mcap];
   const shakeout_low = pos.shakeout_low ? Math.min(pos.shakeout_low, snap.mcap) : snap.mcap;
