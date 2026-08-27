@@ -1,4 +1,4 @@
-# Allow-Exec
+# Allow-Exect
 
 A Pump.fun execution desk. It does **not** scan the launchpad. It only acts
 when a token is created by a **trusted DEV wallet** you add in the UI.
