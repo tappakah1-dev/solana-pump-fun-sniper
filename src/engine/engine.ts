@@ -256,7 +256,7 @@ export class BotEngine {
             this.pushError(r.error || "live_sell_failed", mint);
             continue;
           }
-          if (r.sol > 0) intent.soldSol = r.sol;
+          intent.soldSol = r.sol;
         }
         const result = applyIntent(intent, this.config, this.now, this.risk, pos, snap, wallet);
         this.appendLogs(result.logs);

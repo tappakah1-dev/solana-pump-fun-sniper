@@ -50,6 +50,8 @@ export interface BotConfig {
   ws_url: string;
   ticket_sol: number;
   slippage_pct: number;
+  /** Assumed real slippage on paper fills (2–3% typical). Not the live cap. */
+  paper_slippage_pct: number;
   jito_tip_sol: number;
   max_open_positions: number;
   max_buys_per_dev_hours: number;

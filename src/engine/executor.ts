@@ -11,6 +11,24 @@ export interface ExecResult {
   walletDelta: number;
 }
 
+/** Priority fee (200k microLamports × 250k CU) + base fee ≈ 0.000055 SOL per paper tx. */
+const PAPER_TX_FEE_SOL = 0.000_055;
+
+/** Paper ticket cost: ticket + Jito tip + priority/base fees. */
+function paperBuyCost(cfg: BotConfig): number {
+  return cfg.ticket_sol + cfg.jito_tip_sol + PAPER_TX_FEE_SOL;
+}
+
+/** Paper entry is marked up by the assumed real slippage — not the live cap. */
+function paperEntryMcap(mcap: number, cfg: BotConfig): number {
+  return mcap * (1 + cfg.paper_slippage_pct / 100);
+}
+
+/** Paper sell proceeds: assumed real slippage mark-down, minus Jito tip and priority/base fees. */
+function paperSellProceeds(gross: number, cfg: BotConfig): number {
+  return Math.max(0, gross * (1 - cfg.paper_slippage_pct / 100) - cfg.jito_tip_sol - PAPER_TX_FEE_SOL);
+}
+
 export function applyIntent(
   intent: Intent,
   cfg: BotConfig,
@@ -38,7 +56,8 @@ export function applyIntent(
   if (intent.kind === "BUY") {
     const mint = intent.mint!;
     const mcap = intent.mcap ?? snap?.mcap ?? 0;
-    const fillSol = intent.fillSol ?? intent.fields?.fill_sol ?? cfg.ticket_sol;
+    const paper = intent.fillSol == null && intent.fields?.fill_sol == null;
+    const fillSol = intent.fillSol ?? intent.fields?.fill_sol ?? paperBuyCost(cfg);
     const tokens = intent.fields?.tokens_bought || TOKEN_UNIT;
     const next = emptyPosition({
       mint,
@@ -46,7 +65,7 @@ export function applyIntent(
       symbol: intent.fields?.symbol ?? intent.token ?? "TKN",
       creator: intent.creator ?? "",
       fill_ts: now,
-      fill_mcap: mcap,
+      fill_mcap: paper ? paperEntryMcap(mcap, cfg) : mcap,
       fill_sol: fillSol,
       tokens_bought: tokens,
       tokens_left: intent.fields?.tokens_left || tokens,
@@ -102,7 +121,8 @@ export function applyIntent(
     const fraction = intent.kind === "SELL_ALL" ? 1 : Math.min(1, Math.max(0, intent.fraction ?? 0));
     const soldTokens = pos.tokens_left * fraction;
     const fullVal = leftoverValueSol(pos, mcap);
-    const soldSol = intent.soldSol ?? fullVal * fraction;
+    const paper = intent.soldSol == null;
+    const soldSol = intent.soldSol ?? paperSellProceeds(fullVal * fraction, cfg);
     const next: Position = {
       ...pos,
       ...intent.fields,

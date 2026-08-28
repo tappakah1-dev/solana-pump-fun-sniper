@@ -217,44 +217,45 @@ describe("live any-socials universe", () => {
 });
 
 describe("flat / dump kill", () => {
-  it("still at fill after 20s → sell 100%", () => {
+  it("still at fill after 30s → sell 100%", () => {
     const e = engine();
     const pos = buyAt(e, 5600);
-    e.setNow(ORIGIN + 20_000);
-    e.onSnapshot(snap(e, pos.mint, 5600));
+    // Paper fill is slippage-marked up (5600 → 5768); "still at fill" = 5800.
+    e.setNow(ORIGIN + 30_000);
+    e.onSnapshot(snap(e, pos.mint, 5800));
     const p = e.positions.get(pos.mint)!;
     assert.equal(p.phase, "CLOSED");
     assert.ok(e.logs.some((l) => l.reason === "flat_kill"));
   });
 
-  it("dropped below fill at 20s with no print → sell 100%", () => {
+  it("dropped below fill at 30s with no print → sell 100%", () => {
     const e = engine();
     const pos = buyAt(e, 5600);
-    e.setNow(ORIGIN + 10_000);
+    e.setNow(ORIGIN + 15_000);
     e.onSnapshot(snap(e, pos.mint, 5200));
-    e.setNow(ORIGIN + 20_000);
+    e.setNow(ORIGIN + 30_000);
     e.onSnapshot(snap(e, pos.mint, 4800));
     const p = e.positions.get(pos.mint)!;
     assert.equal(p.phase, "CLOSED");
     assert.ok(e.logs.some((l) => l.reason === "dump_kill"));
   });
 
-  it("printed above 1.05× before 20s → keep, even if it chops", () => {
+  it("printed above 1.05× before 30s → keep, even if it chops", () => {
     const e = engine();
     const pos = buyAt(e, 5600);
     e.setNow(ORIGIN + 8_000);
-    e.onSnapshot(snap(e, pos.mint, 7200));
-    e.setNow(ORIGIN + 20_000);
+    e.onSnapshot(snap(e, pos.mint, 7600));
+    e.setNow(ORIGIN + 30_000);
     e.onSnapshot(snap(e, pos.mint, 5800));
     const p = e.positions.get(pos.mint)!;
     assert.notEqual(p.phase, "CLOSED");
     assert.ok(!e.logs.some((l) => l.reason === "flat_kill" || l.reason === "dump_kill"));
   });
 
-  it("t+10s still flat → do not sell yet", () => {
+  it("t+15s still flat → do not sell yet", () => {
     const e = engine();
     const pos = buyAt(e, 5600);
-    e.setNow(ORIGIN + 10_000);
+    e.setNow(ORIGIN + 15_000);
     e.onSnapshot(snap(e, pos.mint, 5600));
     const p = e.positions.get(pos.mint)!;
     assert.notEqual(p.phase, "CLOSED");
@@ -267,7 +268,7 @@ describe("flatline dead band", () => {
     const e = engine();
     const pos = buyAt(e, 5600);
     e.setNow(ORIGIN + 16_000);
-    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.onSnapshot(snap(e, pos.mint, 7600));
     e.setNow(ORIGIN + 20_000);
     e.onSnapshot(snap(e, pos.mint, 3500));
     let p = e.positions.get(pos.mint)!;
@@ -284,7 +285,7 @@ describe("flatline dead band", () => {
     const e = engine();
     const pos = buyAt(e, 5600);
     e.setNow(ORIGIN + 16_000);
-    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.onSnapshot(snap(e, pos.mint, 7600));
     e.setNow(ORIGIN + 20_000);
     e.onSnapshot(snap(e, pos.mint, 3500));
     e.setNow(ORIGIN + 27_000);
@@ -304,7 +305,7 @@ describe("flatline dead band", () => {
     const e = engine();
     const pos = buyAt(e, 5600);
     e.setNow(ORIGIN + 16_000);
-    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.onSnapshot(snap(e, pos.mint, 7600));
     e.setNow(ORIGIN + 20_000);
     e.onSnapshot(snap(e, pos.mint, 3500));
     e.setNow(ORIGIN + 40_000);
@@ -355,12 +356,12 @@ describe("rent tag during shakeout", () => {
     let p = e.positions.get(pos.mint)!;
     assert.equal(p.phase, "SHAKEOUT");
     e.setNow(ORIGIN + 30_000);
-    e.onSnapshot(snap(e, pos.mint, 11800));
+    e.onSnapshot(snap(e, pos.mint, 15000));
     p = e.positions.get(pos.mint)!;
     assert.equal(p.phase, "SEEK_RENT");
     assert.ok(e.logs.some((l) => l.reason === "rent_tag_in_shakeout"));
     e.setNow(ORIGIN + 31_000);
-    e.onSnapshot(snap(e, pos.mint, 11800));
+    e.onSnapshot(snap(e, pos.mint, 15000));
     p = e.positions.get(pos.mint)!;
     assert.equal(p.did_rent_peel, true);
     assert.equal(p.rent_armed, true);
@@ -373,11 +374,11 @@ describe("rent tag during shakeout", () => {
     e.setNow(ORIGIN + 16_000);
     e.onSnapshot(snap(e, pos.mint, 6000));
     e.setNow(ORIGIN + 40_000);
-    e.onSnapshot(snap(e, pos.mint, 19600));
+    e.onSnapshot(snap(e, pos.mint, 24500));
     let p = e.positions.get(pos.mint)!;
     assert.equal(p.phase, "SEEK_RENT");
     e.setNow(ORIGIN + 41_000);
-    e.onSnapshot(snap(e, pos.mint, 19600));
+    e.onSnapshot(snap(e, pos.mint, 24500));
     p = e.positions.get(pos.mint)!;
     assert.equal(p.phase, "STUB");
     assert.equal(p.did_rent, true);
@@ -416,6 +417,19 @@ describe("open ignore", () => {
   });
 });
 
+describe("paper costs", () => {
+  it("entry includes fees and slippage markup; round-trip at same mcap loses", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    assert.ok(pos.fill_sol > e.config.ticket_sol, "ticket + jito tip + priority fees");
+    assert.ok(pos.fill_mcap > 5600, "entry marked up by slippage");
+    e.sellAll(pos.mint);
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.ok(p.realized_sol < p.fill_sol, "sell slippage + fees make the round-trip a loss");
+  });
+});
+
 describe("manual sells", () => {
   it("sell 25% leaves 75%, then sell 50% leaves 37.5%", () => {
     const e = engine();
@@ -443,7 +457,7 @@ describe("manual sells", () => {
 });
 
 describe("rent", () => {
-  it("fill 5600, mcap 12600 ripping → peel 20%, still SEEK_RENT", () => {
+  it("fill 5600, mcap 15000 ripping → peel 20%, still SEEK_RENT", () => {
     const e = engine();
     const pos = buyAt(e, 5600);
     e.setNow(ORIGIN + 15_000);
@@ -452,7 +466,7 @@ describe("rent", () => {
     e.onSnapshot(snap(e, pos.mint, 5500, { dev_token_balance: 500 }));
     e.setNow(ORIGIN + 150_000);
     e.onSnapshot(
-      snap(e, pos.mint, 12600, {
+      snap(e, pos.mint, 15000, {
         dev_token_balance: 500,
         buy_sol: 9,
         sell_sol: 3,
@@ -478,7 +492,7 @@ describe("rent", () => {
     e.onSnapshot(snap(e, pos.mint, 5500, { dev_token_balance: 500 }));
     e.setNow(ORIGIN + 150_000);
     e.onSnapshot(
-      snap(e, pos.mint, 12600, {
+      snap(e, pos.mint, 15000, {
         dev_token_balance: 500,
         buy_sol: 9,
         sell_sol: 3,
@@ -488,7 +502,7 @@ describe("rent", () => {
     );
     e.setNow(ORIGIN + 155_000);
     e.onSnapshot(
-      snap(e, pos.mint, 12400, {
+      snap(e, pos.mint, 14800, {
         dev_token_balance: 500,
         buy_sol: 2,
         sell_sol: 6,
@@ -512,7 +526,7 @@ describe("rent", () => {
     e.onSnapshot(snap(e, pos.mint, 5500, { dev_token_balance: 500 }));
     e.setNow(ORIGIN + 150_000);
     e.onSnapshot(
-      snap(e, pos.mint, 12600, {
+      snap(e, pos.mint, 12200, {
         dev_token_balance: 500,
         buy_sol: 9,
         sell_sol: 2,
@@ -522,7 +536,7 @@ describe("rent", () => {
     );
     e.setNow(ORIGIN + 160_000);
     e.onSnapshot(
-      snap(e, pos.mint, 14000, {
+      snap(e, pos.mint, 14500, {
         dev_token_balance: 500,
         buy_sol: 11,
         sell_sol: 2,
@@ -535,7 +549,7 @@ describe("rent", () => {
     assert.equal(p.did_rent, false);
     e.setNow(ORIGIN + 170_000);
     e.onSnapshot(
-      snap(e, pos.mint, 16800, {
+      snap(e, pos.mint, 17400, {
         dev_token_balance: 500,
         buy_sol: 12,
         sell_sol: 2,
@@ -561,7 +575,7 @@ describe("stub wick", () => {
     e.onSnapshot(snap(e, pos.mint, 4800, { dev_token_balance: 800 }));
     e.setNow(ORIGIN + 150_000);
     e.onSnapshot(
-      snap(e, pos.mint, 12600, {
+      snap(e, pos.mint, 15000, {
         dev_token_balance: 800,
         buy_sol: 9,
         sell_sol: 3,
@@ -571,7 +585,7 @@ describe("stub wick", () => {
     );
     e.setNow(ORIGIN + 152_000);
     e.onSnapshot(
-      snap(e, pos.mint, 12400, {
+      snap(e, pos.mint, 14800, {
         dev_token_balance: 800,
         buy_sol: 2,
         sell_sol: 6,
@@ -646,9 +660,9 @@ describe("timeouts and second dump", () => {
 
   it("ten DEV sells inside 2 min are not an exit", () => {
     const e = engine();
-    const pos = buyAt(e, 6000);
+    const pos = buyAt(e, 5600);
     e.setNow(ORIGIN + 8_000);
-    e.onSnapshot(snap(e, pos.mint, 7200, { dev_token_balance: 1_000_000_000 }));
+    e.onSnapshot(snap(e, pos.mint, 7600, { dev_token_balance: 1_000_000_000 }));
     let bal = 1_000_000_000;
     for (let i = 1; i <= 10; i++) {
       bal = Math.floor(bal * 0.7);
@@ -674,7 +688,7 @@ describe("timeouts and second dump", () => {
     e.onSnapshot(snap(e, pos.mint, 7200, { dev_token_balance: 120 }));
     e.setNow(ORIGIN + 160_000);
     e.onSnapshot(
-      snap(e, pos.mint, 13000, {
+      snap(e, pos.mint, 16000, {
         dev_token_balance: 120,
         buy_sol: 9,
         sell_sol: 3,
@@ -684,7 +698,7 @@ describe("timeouts and second dump", () => {
     );
     e.setNow(ORIGIN + 162_000);
     e.onSnapshot(
-      snap(e, pos.mint, 12800, {
+      snap(e, pos.mint, 15600, {
         dev_token_balance: 120,
         buy_sol: 2,
         sell_sol: 6,
@@ -712,7 +726,7 @@ describe("timeouts and second dump", () => {
     e.onSnapshot(snap(e, pos.mint, 7200, { dev_token_balance: 500 }));
     e.setNow(ORIGIN + 160_000);
     e.onSnapshot(
-      snap(e, pos.mint, 13000, {
+      snap(e, pos.mint, 16000, {
         dev_token_balance: 500,
         buy_sol: 9,
         sell_sol: 3,
@@ -722,7 +736,7 @@ describe("timeouts and second dump", () => {
     );
     e.setNow(ORIGIN + 162_000);
     e.onSnapshot(
-      snap(e, pos.mint, 12800, {
+      snap(e, pos.mint, 15600, {
         dev_token_balance: 500,
         buy_sol: 2,
         sell_sol: 6,

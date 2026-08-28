@@ -175,7 +175,7 @@ weakening 20–50k is dumped):
 | Multiple vs fill | Agent |
 | --- | --- |
 | 3× / 5× / 6.5× / 8× / 10× / 16× / 30× | Clip a slice of **remaining**, smaller on RIPPING moon tape |
-| Death-zone fade / stall | Sell remaining — this is not a runner |
+| Death-zone fade / stall | Sell remaining — this is not a runner. Early zone (<$20k) only flattens from a drop at/above the wick threshold; smaller early dips hold |
 | Leftover ≤ moonbag SOL after a real runner | Moonbag |
 
 A 14-minute 70% dump with sell volume **kills a fat stub**. A **paid moonbag**
@@ -203,6 +203,13 @@ A DEV is **never** auto-paused after rugs. The 5th–7th coin can be the runner.
 | Enable | Dry run on | Env key + `BOT_LIVE_ENABLED=true` + press **Live** + whitelist if set |
 
 Press **Start** after adding trusted DEV wallets. Creates from other wallets are logged `SKIP`. Allow-listed creates wait for a snapshot (the fill pause), then buy if mcap is not a chase.
+
+**Paper fills are cost-adjusted, not pure 1×.** The paper entry mcap is
+marked up by `paper_slippage_pct` (assumed real slippage — 2–3% typical, not
+the live cap) and the ticket cost includes the Jito tip plus priority/base
+fees; paper sells are marked down by the same assumed slippage minus the tip
+and fees. A round-trip at the same mcap loses money in paper, exactly like it
+would live — the displayed multiple is vs the cost-adjusted fill.
 
 The private key is **never** pasted in the UI. It lives in Vercel project environment variables. The repo you push to GitHub must not contain secrets.
 

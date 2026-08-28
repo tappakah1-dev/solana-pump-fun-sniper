@@ -228,7 +228,7 @@ export function decideStubExit(
     });
   }
 
-  if (regime === "DEAD" && (zone === "death" || zone === "early") && drop >= 0.4) {
+  if (regime === "DEAD" && (zone === "death" || zone === "early") && drop >= (zone === "early" ? cfg.wick_from_high_pct : 0.4)) {
     const think = thinkLine({
       regime,
       zone,
@@ -244,7 +244,7 @@ export function decideStubExit(
 
   if (
     opts.keep &&
-    (zone === "death" || zone === "early") &&
+    zone === "death" &&
     stall >= 4 &&
     sellDominant(snap, cfg) &&
     uniqueDown(snap, pos) &&
@@ -316,7 +316,7 @@ export function decideStubExit(
     });
   }
 
-  if (regime === "WEAKENING" && (zone === "death" || zone === "early") && drop >= 0.28) {
+  if (regime === "WEAKENING" && (zone === "death" || zone === "early") && drop >= (zone === "early" ? cfg.wick_from_high_pct : 0.28)) {
     const think = thinkLine({
       regime,
       zone,
