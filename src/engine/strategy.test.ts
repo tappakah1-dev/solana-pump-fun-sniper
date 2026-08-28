@@ -124,6 +124,55 @@ describe("allow-list entry", () => {
   });
 });
 
+describe("live any-socials universe", () => {
+  it("live with the toggle buys a non-allow coin that has socials", () => {
+    const e = engine({ dry_run: false, live: true, dry_run_any_socials: false, live_any_socials: true });
+    const mint = "MintAnyLive1111111111111111111111111111111";
+    e.onCreate(
+      create({
+        mint,
+        creator: OTHER_CREATOR,
+        symbol: "ANY",
+        name: "Any",
+        socials: { twitter: "https://x.com/any" },
+      }),
+    );
+    e.onSnapshot(
+      snap(e, mint, 5600, {
+        creator: OTHER_CREATOR,
+        socials: { twitter: "https://x.com/any" },
+        name: "Any",
+        symbol: "ANY",
+      }),
+    );
+    assert.ok(e.logs.some((l) => l.level === "BUY" && l.reason === "live_any_socials"));
+  });
+
+  it("live without the toggle still skips non-allow coins", () => {
+    const e = engine({ dry_run: false, live: true, live_any_socials: false });
+    e.onCreate(create({ creator: OTHER_CREATOR, symbol: "XYZ", name: "Xyz" }));
+    e.onSnapshot(snap(e, "MintBiz111111111111111111111111111111111", 5600, { creator: OTHER_CREATOR }));
+    assert.ok(!e.logs.some((l) => l.level === "BUY"));
+    assert.ok(e.logs.some((l) => l.reason === "not_on_allowlist"));
+  });
+
+  it("live with the toggle still requires socials", () => {
+    const e = engine({ dry_run: false, live: true, live_any_socials: true });
+    e.onCreate(create({ socials: {} }));
+    e.onSnapshot(snap(e, create().mint, 5600, { socials: {} }));
+    assert.ok(!e.logs.some((l) => l.level === "BUY"));
+    assert.ok(e.logs.some((l) => l.reason === "no_socials"));
+  });
+
+  it("dry-run ignores live_any_socials", () => {
+    const e = engine({ dry_run: true, live: false, dry_run_any_socials: false, live_any_socials: true });
+    e.onCreate(create({ creator: OTHER_CREATOR, symbol: "XYZ", name: "Xyz" }));
+    e.onSnapshot(snap(e, "MintBiz111111111111111111111111111111111", 5600, { creator: OTHER_CREATOR }));
+    assert.ok(!e.logs.some((l) => l.level === "BUY"));
+    assert.ok(e.logs.some((l) => l.reason === "not_on_allowlist"));
+  });
+});
+
 describe("flat / dump kill", () => {
   it("still at fill after 20s → sell 100%", () => {
     const e = engine();

@@ -119,6 +119,7 @@ export function applyIntent(
     if (intent.kind === "SELL_ALL" || next.tokens_left <= 1e-9) {
       next.tokens_left = 0;
       next.phase = "CLOSED";
+      next.closed_ts = now;
       next.last_action = intent.reason;
       const logEvent = logs[logs.length - 1];
       if (logEvent) {

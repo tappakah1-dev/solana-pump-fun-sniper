@@ -8,7 +8,7 @@ import { LiveTape } from "./live-tape.tsx";
 import { TradeHistory } from "./trade-history.tsx";
 import { LogWindow } from "./log-window.tsx";
 import { SettingsPanel } from "./settings-panel.tsx";
-import { ReplayPanel } from "./replay-panel.tsx";
+import { PnlChart } from "./pnl-chart.tsx";
 import { PanicDialog } from "./panic-dialog.tsx";
 import { useBotStore } from "@/store/bot-store.ts";
 
@@ -34,7 +34,7 @@ export function Desk() {
         <div className="flex min-h-[220px]">
           <LogWindow />
         </div>
-        <ReplayPanel />
+        <PnlChart />
       </div>
       <SettingsPanel />
       <PanicDialog />

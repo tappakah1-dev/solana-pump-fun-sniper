@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Cloud, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
@@ -10,12 +10,18 @@ export function TrustedDevs() {
   const tick = useBotStore((s) => s.tick);
   const engine = useBotStore((s) => s.engine);
   const config = useBotStore((s) => s.config);
+  const allowSynced = useBotStore((s) => s.allowSynced);
   const setConfigField = useBotStore((s) => s.setConfigField);
   const addDevWallets = useBotStore((s) => s.addDevWallets);
   const removeDevWallet = useBotStore((s) => s.removeDevWallet);
+  const syncAllowDevs = useBotStore((s) => s.syncAllowDevs);
   const [draft, setDraft] = useState("");
   const [err, setErr] = useState("");
   void tick;
+
+  useEffect(() => {
+    void syncAllowDevs();
+  }, [syncAllowDevs]);
 
   const entries = engine.allow.entries;
   const paperOpen = config.dry_run && config.dry_run_any_socials && !config.live;
@@ -38,10 +44,20 @@ export function TrustedDevs() {
           <p className="mt-1 text-sm text-muted text-pretty">
             {paperOpen
               ? "Paper mode: any Pump.fun coin with socials can fill. Live still only buys these wallets."
-              : "Coins created by these wallets can be bought. Everyone else is skipped."}
+              : config.live_any_socials
+                ? "Live trades any coin that passes the rules — this list is optional."
+                : "Coins created by these wallets can be bought. Everyone else is skipped."}
           </p>
         </div>
-        <span className="font-mono text-xs tabular-nums text-subtle">{entries.length}</span>
+        <span className="ml-auto flex items-center gap-2">
+          {allowSynced ? (
+            <span className="flex items-center gap-1 font-mono text-[10px] text-muted" title="Saved to your account — survives browsers and redeploys">
+              <Cloud className="size-3" />
+              synced
+            </span>
+          ) : null}
+          <span className="font-mono text-xs tabular-nums text-subtle">{entries.length}</span>
+        </span>
       </div>
 
       <Label className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-bg px-3 py-2.5">
@@ -55,6 +71,21 @@ export function TrustedDevs() {
           checked={paperOpen}
           disabled={!config.dry_run}
           onCheckedChange={(v) => setConfigField("dry_run_any_socials", v)}
+        />
+      </Label>
+
+      <Label className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-bg px-3 py-2.5">
+        <span>
+          <span className="block text-sm text-fg">Live: any coin with socials</span>
+          <span className="mt-0.5 block text-xs text-subtle">
+            Live mode only. Real SOL trades any create that passes the other rules (socials, skip-mcap,
+            risk limits) — trusted DEV wallets become optional. Ignored in dry-run.
+          </span>
+        </span>
+        <Switch
+          checked={config.live_any_socials}
+          disabled={config.dry_run}
+          onCheckedChange={(v) => setConfigField("live_any_socials", v)}
         />
       </Label>
 

@@ -30,7 +30,9 @@ Not financial advice. You can lose the entire ticket. You will, often.
 - Defaults to **dry-run**. A **Paper any coin with socials** switch (on by
   default in dry-run) fills live Pump.fun creates that have socials so you can
   test the exit agent without waiting on a trusted DEV. **Live ignores this**
-  and only buys the allow-list.
+  and only buys the allow-list — unless the **Live: any coin with socials**
+  toggle is on, in which case live trades any create that passes the other
+  rules (socials, skip-mcap, risk limits) and the allow-list becomes optional.
 - Live is gated by Vercel env + `I UNDERSTAND` + operator whitelist
 
 ## What it does not do
@@ -44,7 +46,8 @@ Not financial advice. You can lose the entire ticket. You will, often.
 - Scale in / average
 - Withdraw to any other address
 - Write private keys into logs, UI text, or JSONL
-- Scan non-allow-listed creates for buys (logging them as `SKIP` is fine)
+- Scan non-allow-listed creates for buys (logging them as `SKIP` is fine) —
+  unless the live any-socials toggle is on
 
 ## Market microstructure this desk encodes
 
@@ -80,7 +83,8 @@ Trusted DEV wallets in the UI (stored in the browser). Optional `smart.txt` is
 an exit *hint* after we are in — never an entry reason.
 
 If creator ∉ allow list → ignore. No meme scoring. The allow-list is the
-research.
+research. (With **Live: any coin with socials** on, the allow-list is optional
+live — any create with socials that passes the other rules trades.)
 
 ### Entry (all must pass)
 
@@ -264,25 +268,20 @@ See `.env.example` for the same names with comments. Names only — no values.
 ## How to test (paper, then live)
 
 Trusted DEVs, ticket size, slippage, and Jito tip live in **your browser** on
-that Vercel URL. They are not in GitHub.
+that Vercel URL. They are not in GitHub. Trusted DEV wallets additionally sync
+to your account (`allow_devs` table): add/remove on any browser and the list
+follows you — the browser copy is only an offline fallback. The desk shows
+`synced` once the list is stored server-side.
 
 1. Open the Vercel URL. **Connect Wallet** — must be a key in `OPERATOR_WHITELIST`.
 2. Paste trusted DEV wallets (full addresses). Set **Buy exact SOL in**,
    slippage, Jito tip, skip-mcap. Leave **Dry run ON**.
-3. **Lab** (right side) — run these before any live ticket:
-
-| Preset | What you should see |
-| --- | --- |
-| `Runner_Biz_like` | Peel 20% at 2.1×, trail, wick KEEP, clips, moonbag |
-| `Fake_rip_2.1x` | Peel, then sell-print banks the rest of initials (no 3× hold) |
-| `Rip_hold_to_3x` | Peel 20%, hold trail 2.4× → 2.7×, bank rest at 3× cap |
-| `Cheshire_70_dump` | Paid moonbag rides a 70% dump |
-| `Death_zone_fade` | Unpaid stub dies in the 20–50k band |
-| `NonRunner_no_rent` | Never 2.1× → flatten at timeout |
-
-4. **Start** (still dry-run). Watch live Pump creates. Non-allow-listed =
+3. **Start** (still dry-run). Watch live Pump creates. Non-allow-listed =
    `SKIP`. An allow-listed create should `BUY` only if mcap is not a chase.
    THINK lines: peel → trail hold or fade/cap → stub agent.
+   Closed trades land in **Traded coins history**, and cumulative net PnL
+   draws in the PnL chart below the log. The replay presets live on in
+   `src/engine/replay.ts` (`Runner_Biz_like`, `Rip_hold_to_3x`, …) for tests.
 5. Live, only after paper looks right:
    - Vercel → set `BOT_LIVE_ENABLED=true` → Redeploy
    - Desk: type **I UNDERSTAND**

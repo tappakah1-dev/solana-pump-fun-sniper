@@ -162,6 +162,11 @@ function paperAnySocials(cfg: BotConfig): boolean {
   return Boolean(cfg.dry_run && cfg.dry_run_any_socials && !cfg.live);
 }
 
+/** Live only: the allow-list is optional — any create passing the other rules trades. */
+function liveAnySocials(cfg: BotConfig): boolean {
+  return Boolean(cfg.live && cfg.live_any_socials && !cfg.dry_run);
+}
+
 function entrySkip(
   create: TokenCreate,
   cfg: BotConfig,
@@ -172,7 +177,8 @@ function entrySkip(
   const token = create.symbol || create.name;
   const onList = input.allowHas(creator);
   const paperOpen = paperAnySocials(cfg);
-  if (!onList && !paperOpen) {
+  const anyOpen = liveAnySocials(cfg);
+  if (!onList && !paperOpen && !anyOpen) {
     return {
       kind: "SKIP",
       level: "SKIP",
@@ -289,12 +295,13 @@ function maybeBuy(create: TokenCreate, mcap: number, input: DecideInput): Intent
   const token = create.symbol || create.name;
   const onList = input.allowHas(create.creator);
   const paper = paperAnySocials(input.config) && !onList;
+  const anyLive = liveAnySocials(input.config) && !onList;
   return [
     {
       kind: "BUY",
       level: "BUY",
-      reason: paper ? "paper_any_socials" : "allow_fill",
-      msg: `${token} ${input.config.ticket_sol} SOL fill_mcap=${Math.round(mcap)} dry=${input.config.dry_run}${paper ? " paper_any_socials" : ""}`,
+      reason: paper ? "paper_any_socials" : anyLive ? "live_any_socials" : "allow_fill",
+      msg: `${token} ${input.config.ticket_sol} SOL fill_mcap=${Math.round(mcap)} dry=${input.config.dry_run}${paper ? " paper_any_socials" : ""}${anyLive ? " live_any_socials" : ""}`,
       mint: create.mint,
       creator: create.creator,
       token,
@@ -310,10 +317,11 @@ function handleCreate(create: TokenCreate, input: DecideInput): Intent[] {
   const token = create.symbol || create.name;
   const allow = input.allowHas(create.creator);
   const paper = paperAnySocials(input.config);
+  const anyOpen = liveAnySocials(input.config);
   const seen: Intent = log({
     level: "SEEN",
     reason: "create",
-    msg: `${token} creator=${shortAddr(create.creator)} allow=${allow ? "yes" : paper ? "paper" : "no"} socials=${socialFlag(create.socials)} mcap=${create.mcap ?? "n/a"}`,
+    msg: `${token} creator=${shortAddr(create.creator)} allow=${allow ? "yes" : paper ? "paper" : anyOpen ? "any" : "no"} socials=${socialFlag(create.socials)} mcap=${create.mcap ?? "n/a"}`,
     mint: create.mint,
     creator: create.creator,
     token,

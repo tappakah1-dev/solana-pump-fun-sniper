@@ -44,6 +44,8 @@ export interface BotConfig {
   live: boolean;
   /** Dry-run only. Paper-fill any Pump.fun create with socials. Ignored when live. */
   dry_run_any_socials: boolean;
+  /** Live only. Trade any create that passes the other rules, not just trusted DEV wallets. */
+  live_any_socials: boolean;
   rpc_url: string;
   ws_url: string;
   ticket_sol: number;
@@ -150,6 +152,8 @@ export interface Position {
   socials: Socials;
   last_action: string;
   last_mcap: number;
+  /** Set when the position closes (sell-all or fully exhausted). 0 while open. */
+  closed_ts: number;
 }
 
 export interface TokenCreate {
@@ -299,6 +303,7 @@ export function emptyPosition(partial: Partial<Position> & Pick<Position, "mint"
     socials: {},
     last_action: "",
     last_mcap: 0,
+    closed_ts: 0,
     ...partial,
   };
 }

@@ -4,6 +4,7 @@
 dry_run: true
 live: false
 dry_run_any_socials: true
+live_any_socials: false
 rpc_url: "https://solana-rpc.publicnode.com"
 ws_url: ""
 ticket_sol: 0.05

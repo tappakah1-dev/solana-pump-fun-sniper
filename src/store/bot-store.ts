@@ -23,6 +23,7 @@ import type { LogEvent, Position } from "@/engine/models.ts";
 import { leftoverValueSol, isOpenPhase } from "@/engine/models.ts";
 import { startLiveRunner, stopLiveRunner } from "@/engine/live-runner.ts";
 import { walletStatus, operatorStatus, operatorChallenge, operatorVerify } from "@/lib/pump/server.ts";
+import { deleteAllowDev, listAllowDevs, saveAllowDev } from "@/lib/allow-dev/server.ts";
 import type { TapeRow } from "@/engine/pump-map.ts";
 import { listInjectedWallets, connectInjected, signOperatorMessage, explainWalletError } from "@/lib/solana-wallet.ts";
 
@@ -70,6 +71,14 @@ export interface HistoryView {
   pos: Position;
   peakMult: number;
   net: number;
+}
+
+export interface PnlPoint {
+  ts: number;
+  net: number;
+  total: number;
+  symbol: string;
+  reason: string;
 }
 
 interface BotState {
@@ -132,6 +141,9 @@ interface BotState {
   setPanicOpen: (v: boolean) => void;
   rows: () => RowView[];
   historyRows: () => HistoryView[];
+  pnlSeries: () => PnlPoint[];
+  allowSynced: boolean;
+  syncAllowDevs: () => Promise<void>;
   logs: () => LogEvent[];
   filteredLogs: () => LogEvent[];
   downloadJsonl: () => void;
@@ -169,6 +181,7 @@ export const useBotStore = create<BotState>((set, get) => {
     tick: 0,
     config: seeded.config,
     allowText: seeded.allowText,
+    allowSynced: false,
     smartText: seeded.smartText,
     understood: false,
     livePhrase: "",
@@ -381,6 +394,9 @@ export const useBotStore = create<BotState>((set, get) => {
         existing.add(e.key);
         next += `\n${e.label ? `${e.original}  # ${e.label}` : e.original}`;
         added += 1;
+        void saveAllowDev({ data: { address: e.key, original: e.original, label: e.label } }).catch(() => {
+          /* signed out — browser copy only */
+        });
       }
       if (!added) return 0;
       next += "\n";
@@ -405,6 +421,25 @@ export const useBotStore = create<BotState>((set, get) => {
       set({ allowText: next });
       get().persistAll();
       get().bump();
+      void deleteAllowDev({ data: { address: key } }).catch(() => {
+        /* signed out — browser copy only */
+      });
+    },
+    syncAllowDevs: async () => {
+      try {
+        const rows = await listAllowDevs();
+        if (!rows) return; // no session — keep the browser copy
+        const lines = rows.map((r) => (r.label ? `${r.original ?? r.address}  # ${r.label}` : r.original ?? r.address));
+        const allowText = lines.length
+          ? `# Trusted DEV wallets — synced from your account.\n${lines.join("\n")}\n`
+          : EMPTY_ALLOW_TXT;
+        get().engine.setAllow(allowText);
+        set({ allowText, allowSynced: true });
+        get().persistAll();
+        get().bump();
+      } catch {
+        /* offline — keep the browser copy */
+      }
     },
 
     setMcapSlider: (n) => {
@@ -580,6 +615,25 @@ export const useBotStore = create<BotState>((set, get) => {
           const peakMult = pos.fill_mcap > 0 ? pos.local_high / pos.fill_mcap : 0;
           return { pos, peakMult, net: pos.realized_sol - pos.fill_sol };
         });
+    },
+    pnlSeries: () => {
+      const { engine } = get();
+      const rows = engine
+        .positionList()
+        .filter((pos) => pos.phase === "CLOSED")
+        .map((pos) => ({
+          ts: pos.closed_ts || pos.fill_ts,
+          net: pos.realized_sol - pos.fill_sol,
+          symbol: pos.symbol,
+          reason: pos.last_reason || pos.last_action,
+        }))
+        .filter((r) => r.ts > 0)
+        .sort((a, b) => a.ts - b.ts);
+      let total = 0;
+      return rows.map((r) => {
+        total += r.net;
+        return { ...r, total };
+      });
     },
     logs: () => get().engine.logs,
     filteredLogs: () => {

@@ -119,6 +119,11 @@ function paperUniverse(engine: BotEngine): boolean {
   return Boolean(c.dry_run && c.dry_run_any_socials && !c.live);
 }
 
+function liveAnyUniverse(engine: BotEngine): boolean {
+  const c = engine.config;
+  return Boolean(c.live && c.live_any_socials && !c.dry_run);
+}
+
 function toTape(coin: PumpCoin, engine: BotEngine): TapeRow {
   const allow = engine.allow.has(coin.creator);
   const socials = hasSocials({
@@ -127,6 +132,7 @@ function toTape(coin: PumpCoin, engine: BotEngine): TapeRow {
     website: coin.website || undefined,
   });
   const paper = paperUniverse(engine) && socials && !allow;
+  const anyOpen = liveAnyUniverse(engine) && socials && !allow;
   return {
     mint: coin.mint,
     name: coin.name || "TOKEN",
@@ -137,7 +143,7 @@ function toTape(coin: PumpCoin, engine: BotEngine): TapeRow {
     allow,
     hasSocials: socials,
     complete: Boolean(coin.complete),
-    tag: allow ? "buy" : paper ? "paper" : "skip",
+    tag: allow || anyOpen ? "buy" : paper ? "paper" : "skip",
   };
 }
 
@@ -173,6 +179,7 @@ async function tick(hooks: LiveRunnerHooks) {
     const PAPER_WINDOW = 45_000;
     const ALLOW_WINDOW = 12 * 60_000;
     const paper = paperUniverse(engine);
+    const anyOpen = liveAnyUniverse(engine);
 
     for (const coin of coins) {
       if (seen.has(coin.mint)) continue;
@@ -189,7 +196,7 @@ async function tick(hooks: LiveRunnerHooks) {
       let ingest = false;
       if (allow && age <= ALLOW_WINDOW) ingest = true;
       else if (
-        paper &&
+        (paper || anyOpen) &&
         socials &&
         age <= PAPER_WINDOW &&
         engine.openCount() < engine.config.max_open_positions
