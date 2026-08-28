@@ -199,10 +199,19 @@ async function sendSignedTx(
   signed: string,
   jitoTipSol: number | undefined,
 ): Promise<{ ok: true; signature: string } | { ok: false; error: string }> {
+  const { signatureFromSignedTx } = await import("@/engine/jito.server.ts");
   if (jitoTipSol && jitoTipSol > 0) {
-    const { sendViaJito } = await import("@/engine/jito.server.ts");
+    const { sendViaJito, confirmSignature } = await import("@/engine/jito.server.ts");
     const jito = await sendViaJito(signed);
-    if (jito.ok) return jito;
+    if (jito.ok) {
+      const sig = signatureFromSignedTx(signed);
+      if (!sig) return jito;
+      const status = await confirmSignature(rpcUrl, sig, 12_000);
+      if (status === "confirmed") return { ok: true, signature: sig };
+      if (status === "landed_err") return { ok: false, error: "tx_landed_error" };
+      // Bundle accepted but never landed — send the same signed tx straight to
+      // the RPC while the blockhash is still fresh.
+    }
   }
   const url = assertHttpUrl(rpcUrl, "rpc");
   const ctrl = new AbortController();
@@ -224,7 +233,11 @@ async function sendSignedTx(
     });
     const json = (await res.json()) as { result?: string; error?: { message?: string } };
     if (json.error || !json.result) {
-      return { ok: false, error: json.error?.message || "send_failed" };
+      const msg = json.error?.message || "";
+      const sig = signatureFromSignedTx(signed);
+      // The Jito bundle landed while we were polling — that is not a failure.
+      if (sig && /already processed/i.test(msg)) return { ok: true, signature: sig };
+      return { ok: false, error: msg.slice(0, 180) || "send_failed" };
     }
     return { ok: true, signature: json.result };
   } finally {

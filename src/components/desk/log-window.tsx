@@ -14,6 +14,10 @@ export function LogWindow() {
   const setLogPaused = useBotStore((s) => s.setLogPaused);
   const setLogFilter = useBotStore((s) => s.setLogFilter);
   const logs = useMemo(() => useBotStore.getState().filteredLogs(), [tick, filter]);
+  const rows = useMemo(
+    () => logs.map((e, i) => ({ e, key: `${e.ts_ms}-${i}` })).reverse(),
+    [logs],
+  );
   const downloadJsonl = useBotStore((s) => s.downloadJsonl);
   const scroller = useRef<HTMLDivElement>(null);
   void tick;
@@ -22,11 +26,11 @@ export function LogWindow() {
     if (paused) return;
     const el = scroller.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    el.scrollTop = 0;
   }, [logs.length, paused, tick]);
 
   return (
-    <section className="flex min-h-48 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-bg">
+    <section className="flex max-h-[24rem] min-h-48 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-bg">
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2">
         <h2 className="text-xs font-medium uppercase tracking-[0.14em] text-subtle">Decision log</h2>
         <div className="flex-1" />
@@ -46,11 +50,11 @@ export function LogWindow() {
         </Button>
       </div>
       <div ref={scroller} className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-5">
-        {logs.length === 0 ? (
+        {rows.length === 0 ? (
           <div className="text-subtle">No events yet. Press Start — dry-run papers coins with socials.</div>
         ) : (
-          logs.map((e, i) => (
-            <div key={`${e.ts_ms}-${i}`} className={`log-${LOG_TONE[e.level]} whitespace-pre`}>
+          rows.map(({ e, key }) => (
+            <div key={key} className={`log-${LOG_TONE[e.level]} whitespace-pre`}>
               {e.human}
             </div>
           ))

@@ -293,6 +293,21 @@ Buy size in the UI is the `buy_exact_sol_in` spendable SOL (`ticket_sol`). Same 
 
 Market data death (repeated Pump.fun API failures) blocks new buys; exits still attempt if a price is available. Buy retry: at most once per mint.
 
+### Live fill failures
+
+A failed live fill logs one ERROR line with the full chain, e.g.
+`native:sim_failed … | portal:418 …`. Reading it:
+
+- `native:… | portal:418 …` — the native curve tx failed to build (usually a
+  transient RPC/simulation flake; one retry is attempted) and PumpPortal's
+  `trade-local` rate-limited the Vercel server IP (418 = rate limit / temporary
+  ban). No tx was sent. A Helius key makes the native path (account fetch +
+  simulation) far more reliable and keeps you off the portal entirely.
+- `tx_landed_error` — the tx landed but the program errored; no fill.
+- A Jito accept is no longer logged as a fill: the desk confirms the tx
+  signature on-chain for ~12s and falls back to a direct RPC send if the bundle
+  did not land, so a `BUY` line always means the tx is on-chain.
+
 ## Configuration
 
 Buy metrics sit on the main screen (ticket SOL, skip mcap, max open, daily loss,

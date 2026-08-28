@@ -1,4 +1,5 @@
-import { PublicKey, SystemProgram, type TransactionInstruction } from "@solana/web3.js";
+import { PublicKey, SystemProgram, Transaction, VersionedTransaction, type TransactionInstruction } from "@solana/web3.js";
+import bs58 from "bs58";
 
 /** Official Jito tip accounts. Pick one at random per tx. */
 export const JITO_TIP_ACCOUNTS = [
@@ -45,10 +46,65 @@ export async function sendViaJito(signedBase64: string): Promise<{ ok: true; sig
     if (json.error || !json.result) {
       return { ok: false, error: json.error?.message || `jito_${res.status}` };
     }
+    // json.result is the bundle id, not a tx signature. Callers confirm on-chain.
     return { ok: true, signature: json.result };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "jito_failed" };
   } finally {
     clearTimeout(t);
   }
+}
+
+/** The real tx signature, recovered from the signed tx bytes. Jito returns a bundle id instead. */
+export function signatureFromSignedTx(signedBase64: string): string | null {
+  try {
+    const buf = Buffer.from(signedBase64, "base64");
+    if (buf.length < 65) return null;
+    if (buf[0] === 0x80) {
+      const v = VersionedTransaction.deserialize(buf);
+      const sig = v.signatures[0];
+      return sig ? bs58.encode(sig) : null;
+    }
+    const t = Transaction.from(buf);
+    return t.signature ? bs58.encode(t.signature) : null;
+  } catch {
+    return null;
+  }
+}
+
+export type ConfirmStatus = "confirmed" | "landed_err" | "not_found";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Poll getSignatureStatuses until the tx confirms, errors on-chain, or the window closes. */
+export async function confirmSignature(rpcUrl: string, signature: string, timeoutMs = 12_000): Promise<ConfirmStatus> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "getSignatureStatuses",
+          params: [[signature], { searchTransactionHistory: true }],
+        }),
+      });
+      const json = (await res.json()) as {
+        result?: { value?: ({ err?: unknown; confirmationStatus?: string } | null)[] };
+      };
+      const v = json.result?.value?.[0];
+      if (v) {
+        if (v.err) return "landed_err";
+        if (v.confirmationStatus === "confirmed" || v.confirmationStatus === "finalized") return "confirmed";
+      }
+    } catch {
+      /* poll again */
+    }
+    await sleep(1500);
+  }
+  return "not_found";
 }

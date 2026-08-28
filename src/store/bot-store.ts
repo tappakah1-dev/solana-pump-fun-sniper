@@ -66,6 +66,12 @@ export interface RowView {
   unrealized: number;
 }
 
+export interface HistoryView {
+  pos: Position;
+  peakMult: number;
+  net: number;
+}
+
 interface BotState {
   engine: BotEngine;
   tick: number;
@@ -125,6 +131,7 @@ interface BotState {
   setSettingsOpen: (v: boolean) => void;
   setPanicOpen: (v: boolean) => void;
   rows: () => RowView[];
+  historyRows: () => HistoryView[];
   logs: () => LogEvent[];
   filteredLogs: () => LogEvent[];
   downloadJsonl: () => void;
@@ -563,6 +570,16 @@ export const useBotStore = create<BotState>((set, get) => {
           unrealized: leftover - costLeft,
         };
       });
+    },
+    historyRows: () => {
+      const { engine } = get();
+      return engine
+        .positionList()
+        .filter((pos) => pos.phase === "CLOSED")
+        .map((pos) => {
+          const peakMult = pos.fill_mcap > 0 ? pos.local_high / pos.fill_mcap : 0;
+          return { pos, peakMult, net: pos.realized_sol - pos.fill_sol };
+        });
     },
     logs: () => get().engine.logs,
     filteredLogs: () => {

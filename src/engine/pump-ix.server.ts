@@ -145,7 +145,8 @@ async function buildPortal(input: BuildSwapInput): Promise<BuildSwapResult> {
     const buf = Buffer.from(await res.arrayBuffer());
     const asText = buf.toString("utf8");
     if (!res.ok) {
-      return { ok: false, error: asText.slice(0, 180) || `portal_${res.status}` };
+      const body = asText.replace(/\s+/g, " ").trim().slice(0, 140);
+      return { ok: false, error: body ? `portal_${res.status}: ${body}` : `portal_${res.status}` };
     }
     if (asText.startsWith("{") || asText.startsWith("error") || asText.toLowerCase().includes("bad request")) {
       return { ok: false, error: asText.slice(0, 180) };
@@ -267,16 +268,27 @@ async function buildNative(input: BuildSwapInput): Promise<BuildSwapResult> {
   return { ok: true, tx: Buffer.from(raw).toString("base64"), via: "native" };
 }
 
+async function buildNativeSafe(input: BuildSwapInput): Promise<BuildSwapResult> {
+  const attempt = () =>
+    buildNative(input).catch((e: unknown) => ({
+      ok: false as const,
+      error: e instanceof Error ? e.message : "native_failed",
+    }));
+  const first = await attempt();
+  if (first.ok) return first;
+  // Structural errors will not pass on a retry; transient RPC/sim flake might.
+  const structural = ["curve_complete", "mint_missing", "curve_missing", "global_missing"];
+  if (structural.includes(first.error ?? "")) return first;
+  return attempt();
+}
+
 export async function buildSwapTransaction(input: BuildSwapInput): Promise<BuildSwapResult> {
   if (input.complete) {
     const portal = await buildPortal({ ...input, complete: true });
     if (portal.ok) return portal;
     return { ok: false, error: portal.error || "pumpswap_build_failed" };
   }
-  const native = await buildNative(input).catch((e: unknown) => ({
-    ok: false as const,
-    error: e instanceof Error ? e.message : "native_failed",
-  }));
+  const native = await buildNativeSafe(input);
   if (native.ok) return native;
   if (native.error === "curve_complete") {
     const amm = await buildPortal({ ...input, complete: true });
@@ -285,5 +297,8 @@ export async function buildSwapTransaction(input: BuildSwapInput): Promise<Build
   }
   const portal = await buildPortal(input);
   if (portal.ok) return portal;
-  return { ok: false, error: native.error || portal.error || "swap_build_failed" };
+  return {
+    ok: false,
+    error: `native:${native.error ?? "failed"} | portal:${portal.error ?? "failed"}`,
+  };
 }

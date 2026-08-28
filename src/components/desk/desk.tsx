@@ -5,6 +5,7 @@ import { TrustedDevs } from "./trusted-devs.tsx";
 import { MetricsPanel } from "./metrics-panel.tsx";
 import { PositionsTable } from "./positions-table.tsx";
 import { LiveTape } from "./live-tape.tsx";
+import { TradeHistory } from "./trade-history.tsx";
 import { LogWindow } from "./log-window.tsx";
 import { SettingsPanel } from "./settings-panel.tsx";
 import { ReplayPanel } from "./replay-panel.tsx";
@@ -29,6 +30,7 @@ export function Desk() {
           <PositionsTable />
           <LiveTape />
         </div>
+        <TradeHistory />
         <div className="flex min-h-[220px]">
           <LogWindow />
         </div>
