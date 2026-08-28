@@ -7,7 +7,6 @@ import { PositionsTable } from "./positions-table.tsx";
 import { LiveTape } from "./live-tape.tsx";
 import { TradeHistory } from "./trade-history.tsx";
 import { LogWindow } from "./log-window.tsx";
-import { SettingsPanel } from "./settings-panel.tsx";
 import { PnlChart } from "./pnl-chart.tsx";
 import { PanicDialog } from "./panic-dialog.tsx";
 import { useBotStore } from "@/store/bot-store.ts";
@@ -47,7 +46,6 @@ export function Desk() {
         </div>
         <PnlChart />
       </div>
-      <SettingsPanel />
       <PanicDialog />
     </div>
   );

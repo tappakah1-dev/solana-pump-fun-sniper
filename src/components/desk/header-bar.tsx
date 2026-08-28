@@ -8,17 +8,16 @@ export function HeaderBar() {
   const tick = useBotStore((s) => s.tick);
   const config = useBotStore((s) => s.config);
   const running = useBotStore((s) => s.running);
-  const understood = useBotStore((s) => s.understood);
   const engine = useBotStore((s) => s.engine);
   const start = useBotStore((s) => s.start);
   const stop = useBotStore((s) => s.stop);
-  const setSettingsOpen = useBotStore((s) => s.setSettingsOpen);
+  const setLiveTrading = useBotStore((s) => s.setLiveTrading);
   const setPanicOpen = useBotStore((s) => s.setPanicOpen);
   const operatorSession = useBotStore((s) => s.operatorSession);
   const operatorPubkey = useBotStore((s) => s.operatorPubkey);
   void tick;
 
-  const live = engine.isLiveArmed() && understood && !config.dry_run;
+  const live = engine.isLiveArmed();
   const open = engine.openCount();
   const connected = running && engine.listenerConnected;
   const operatorLocked = engine.operatorRequired && !operatorSession;
@@ -52,6 +51,11 @@ export function HeaderBar() {
               : "env wallet"
             : "set BOT_PRIVATE_KEY on Vercel"}
         </Badge>
+        {engine.keyConfigured && !engine.liveEnvEnabled ? (
+          <Badge variant="live" className="normal-case tracking-normal" title="Live swaps return live_env_disabled until it is true">
+            BOT_LIVE_ENABLED off
+          </Badge>
+        ) : null}
         <Badge
           variant={engine.rpcProvider === "helius" ? "ok" : "default"}
           className="normal-case tracking-normal"
@@ -93,10 +97,26 @@ export function HeaderBar() {
           <AlertTriangle className="size-3.5" />
           Panic
         </Button>
-        <Button variant="ghost" onClick={() => setSettingsOpen(true)}>
-          <Shield className="size-3.5" />
-          Live
-        </Button>
+        {live ? (
+          <Button variant="secondary" onClick={() => setLiveTrading(false)} title="Back to paper trading">
+            <Shield className="size-3.5" />
+            Dry run
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            onClick={() => setLiveTrading(true)}
+            disabled={operatorLocked}
+            title={
+              operatorLocked
+                ? "Connect the whitelisted Phantom first (Solana network)"
+                : "Arm real SOL trades (BOT_LIVE_ENABLED must be true on Vercel)"
+            }
+          >
+            <Shield className="size-3.5" />
+            Live
+          </Button>
+        )}
       </div>
     </header>
   );

@@ -125,8 +125,9 @@ describe("allow-list entry", () => {
 });
 
 describe("live any-socials universe", () => {
-  it("live with the toggle buys a non-allow coin that has socials", () => {
+  it("live with the toggle buys a non-allow coin that has socials", async () => {
     const e = engine({ dry_run: false, live: true, dry_run_any_socials: false, live_any_socials: true });
+    e.setWalletStatus({ keyConfigured: true, liveEnabled: true, publicKey: "BotWallet" });
     const mint = "MintAnyLive1111111111111111111111111111111";
     e.onCreate(
       create({
@@ -145,6 +146,7 @@ describe("live any-socials universe", () => {
         symbol: "ANY",
       }),
     );
+    await e.settleUnsettled();
     assert.ok(e.logs.some((l) => l.level === "BUY" && l.reason === "live_any_socials"));
   });
 
@@ -172,11 +174,12 @@ describe("live any-socials universe", () => {
     assert.ok(e.logs.some((l) => l.reason === "not_on_allowlist"));
   });
 
-  it("empty allow-list + toggle → still buys any coin with socials", () => {
+  it("empty allow-list + toggle → still buys any coin with socials", async () => {
     const e = engine(
       { dry_run: false, live: true, live_any_socials: true },
       EMPTY_ALLOW_TXT,
     );
+    e.setWalletStatus({ keyConfigured: true, liveEnabled: true, publicKey: "BotWallet" });
     const mint = "MintNoList11111111111111111111111111111111";
     e.onCreate(
       create({
@@ -195,6 +198,7 @@ describe("live any-socials universe", () => {
         symbol: "FREE",
       }),
     );
+    await e.settleUnsettled();
     assert.ok(e.logs.some((l) => l.level === "BUY" && l.reason === "live_any_socials"));
     assert.ok(!e.logs.some((l) => l.reason === "not_on_allowlist"));
   });

@@ -87,8 +87,6 @@ interface BotState {
   config: BotConfig;
   allowText: string;
   smartText: string;
-  understood: boolean;
-  livePhrase: string;
   running: boolean;
   mcapSlider: number;
   replayT: number;
@@ -98,7 +96,6 @@ interface BotState {
   replayOrigin: number;
   logPaused: boolean;
   logFilter: string;
-  settingsOpen: boolean;
   panicOpen: boolean;
   mcaps: Record<string, number>;
   feed: TapeRow[];
@@ -116,8 +113,7 @@ interface BotState {
   setAllowText: (t: string) => void;
   reloadAllow: () => void;
   setSmartText: (t: string) => void;
-  setLivePhrase: (t: string) => void;
-  confirmLive: () => void;
+  setLiveTrading: (v: boolean) => void;
   refreshWalletStatus: () => Promise<void>;
   connectOperator: () => Promise<void>;
   disconnectOperator: () => void;
@@ -137,7 +133,6 @@ interface BotState {
   panic: (includeMoonbags: boolean) => void;
   setLogPaused: (v: boolean) => void;
   setLogFilter: (t: string) => void;
-  setSettingsOpen: (v: boolean) => void;
   setPanicOpen: (v: boolean) => void;
   rows: () => RowView[];
   historyRows: () => HistoryView[];
@@ -183,8 +178,6 @@ export const useBotStore = create<BotState>((set, get) => {
     allowText: seeded.allowText,
     allowSynced: false,
     smartText: seeded.smartText,
-    understood: false,
-    livePhrase: "",
     running: false,
     mcapSlider: 6000,
     replayT: 0,
@@ -194,7 +187,6 @@ export const useBotStore = create<BotState>((set, get) => {
     replayOrigin: Date.now(),
     logPaused: false,
     logFilter: "",
-    settingsOpen: false,
     panicOpen: false,
 
     mcaps: {},
@@ -285,28 +277,27 @@ export const useBotStore = create<BotState>((set, get) => {
       get().persistAll();
     },
 
-    setLivePhrase: (t) => set({ livePhrase: t }),
-    confirmLive: () => {
-      const ok = get().livePhrase.trim() === "I UNDERSTAND";
-      get().engine.understood = ok;
-      if (ok) {
-        if (get().engine.operatorRequired && !get().operatorSession) {
-          set({ understood: false, operatorError: "Connect a whitelisted wallet before arming live" });
-          get().engine.understood = false;
+    setLiveTrading: (v) => {
+      const { engine } = get();
+      if (v) {
+        if (engine.operatorRequired && !get().operatorSession) {
+          set({ operatorError: "Connect a whitelisted wallet before arming live" });
           get().bump();
           return;
         }
         const cfg = { ...get().config, live: true, dry_run: false };
-        get().engine.setConfig(cfg);
+        engine.setConfig(cfg);
         // Fresh live book: paper positions must not occupy live ticket slots
         // or carry paper risk (daily loss, cooldowns) into live trading.
-        get().engine.resetBook();
-        set({ understood: true, config: cfg });
+        engine.resetBook();
+        set({ config: cfg, operatorError: "" });
         get().persistAll();
         void get().refreshWalletStatus();
       } else {
-        get().engine.understood = false;
-        set({ understood: false });
+        const cfg = { ...get().config, live: false, dry_run: true };
+        engine.setConfig(cfg);
+        set({ config: cfg });
+        get().persistAll();
       }
       get().bump();
     },
@@ -586,7 +577,6 @@ export const useBotStore = create<BotState>((set, get) => {
 
     setLogPaused: (v) => set({ logPaused: v }),
     setLogFilter: (t) => set({ logFilter: t }),
-    setSettingsOpen: (v) => set({ settingsOpen: v }),
     setPanicOpen: (v) => set({ panicOpen: v }),
 
     rows: () => {

@@ -33,7 +33,7 @@ Not financial advice. You can lose the entire ticket. You will, often.
   and only buys the allow-list — unless the **Live: any coin with socials**
   toggle is on, in which case live trades any create that passes the other
   rules (socials, skip-mcap, risk limits) and the allow-list becomes optional.
-- Live is gated by Vercel env + `I UNDERSTAND` + operator whitelist
+- Live is gated by Vercel env + the **Live** toggle + operator whitelist
 
 ## What it does not do
 
@@ -200,7 +200,7 @@ A DEV is **never** auto-paused after rugs. The 5th–7th coin can be the runner.
 | Transactions | None (paper fills) | Real `buy_exact_sol_in` / sell, signed on the server |
 | Curve vs PumpSwap | Venue tracked | Curve native ix, graduated sells via PumpSwap (`pump-amm`) |
 | Wallet | Simulated SOL | `BOT_PRIVATE_KEY` in Vercel env |
-| Enable | Dry run on | Env key + `BOT_LIVE_ENABLED=true` + type `I UNDERSTAND` + whitelist if set |
+| Enable | Dry run on | Env key + `BOT_LIVE_ENABLED=true` + press **Live** + whitelist if set |
 
 Press **Start** after adding trusted DEV wallets. Creates from other wallets are logged `SKIP`. Allow-listed creates wait for a snapshot (the fill pause), then buy if mcap is not a chase.
 
@@ -257,7 +257,7 @@ Add Preview only if you will open preview URLs.
 | `BOT_OPERATOR_SECRET` | optional | Long random string |
 
 Then **Deploy**. Treat the Vercel URL as a private desk. Anyone who can open it
-with an empty whitelist and type `I UNDERSTAND` can fire live trades once
+with an empty whitelist can fire live trades with one click on **Live** once
 `BOT_LIVE_ENABLED=true`.
 
 Jito tip is **not** an env var — it is the `Jito tip (SOL)` field on the desk.
@@ -284,7 +284,7 @@ follows you — the browser copy is only an offline fallback. The desk shows
    `src/engine/replay.ts` (`Runner_Biz_like`, `Rip_hold_to_3x`, …) for tests.
 5. Live, only after paper looks right:
    - Vercel → set `BOT_LIVE_ENABLED=true` → Redeploy
-   - Desk: type **I UNDERSTAND**
+   - Desk: press **Live** (header) — arms real swaps, clears the paper book
    - One ticket, one DEV you actually trust
    - Confirm the first fill, the 20% peel, and the trail/fade on the log
 
@@ -323,5 +323,4 @@ seeds, Helius API keys, or raw signed transactions.
 
 Most launches die. This desk can lose the full ticket on every trade. Daily
 loss limit and max open positions are brakes, not guarantees. This is not
-financial advice. If you enable live, you typed `I UNDERSTAND` because you
-do.
+financial advice. Pressing **Live** means real SOL leaves the wallet.

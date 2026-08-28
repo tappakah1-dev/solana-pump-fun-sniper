@@ -187,12 +187,11 @@ export function applyIntent(
 
 export interface LiveGate {
   liveFlag: boolean;
-  understood: boolean;
   dryRun: boolean;
 }
 
 export function liveArmed(g: LiveGate): boolean {
-  return g.liveFlag && g.understood && !g.dryRun;
+  return g.liveFlag && !g.dryRun;
 }
 
 export interface SwapAdapter {

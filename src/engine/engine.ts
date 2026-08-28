@@ -20,7 +20,6 @@ export interface EngineOpts {
   allowText?: string;
   smartText?: string;
   now?: number;
-  understood?: boolean;
 }
 
 export class BotEngine {
@@ -35,7 +34,6 @@ export class BotEngine {
   listenerConnected = false;
   walletSol: number;
   risk: RiskState;
-  understood = false;
   /** Server env wallet. Secret never stored here. */
   keyConfigured = false;
   liveEnvEnabled = false;
@@ -53,7 +51,6 @@ export class BotEngine {
     this.now = opts.now ?? Date.now();
     this.walletSol = this.config.starting_wallet_sol;
     this.risk = createRiskState();
-    this.understood = Boolean(opts.understood);
   }
 
   setNow(ts: number) {
@@ -107,7 +104,6 @@ export class BotEngine {
   isLiveArmed(): boolean {
     return liveArmed({
       liveFlag: this.config.live,
-      understood: this.understood,
       dryRun: this.config.dry_run,
     });
   }
