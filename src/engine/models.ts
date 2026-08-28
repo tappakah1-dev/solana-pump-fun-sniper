@@ -52,6 +52,8 @@ export interface BotConfig {
   slippage_pct: number;
   /** Assumed real slippage on paper fills (2–3% typical). Not the live cap. */
   paper_slippage_pct: number;
+  /** 0–100 dial: how early and how much the desk banks on the way up. 0 = today (2.1×, 20%). */
+  sell_aggressiveness: number;
   jito_tip_sol: number;
   max_open_positions: number;
   max_buys_per_dev_hours: number;
@@ -125,6 +127,9 @@ export interface Position {
   did_rent: boolean;
   /** +110% tagged; remaining initials are trailing. */
   rent_armed: boolean;
+  /** Aggressiveness dial: a fraction of the bag was banked before the 2.1× tag. */
+  did_early_bank: boolean;
+  early_bank_frac: number;
   rent_armed_ts: number | null;
   rent_peak_mcap: number;
   rent_peak_buy_sol: number;
@@ -278,6 +283,8 @@ export function emptyPosition(partial: Partial<Position> & Pick<Position, "mint"
     last_dev_balance: 0,
     did_rent: false,
     rent_armed: false,
+    did_early_bank: false,
+    early_bank_frac: 0,
     rent_armed_ts: null,
     rent_peak_mcap: 0,
     rent_peak_buy_sol: 0,

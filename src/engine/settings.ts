@@ -11,6 +11,7 @@ export const DEFAULT_CONFIG: BotConfig = {
   ticket_sol: 0.05,
   slippage_pct: 25,
   paper_slippage_pct: 3,
+  sell_aggressiveness: 0,
   jito_tip_sol: 0.0002,
   max_open_positions: 3,
   max_buys_per_dev_hours: 8,
@@ -82,6 +83,7 @@ export const CONFIG_META: {
   { key: "ticket_sol", label: "Buy exact SOL in", group: "size", kind: "number", hint: "buy_exact_sol_in spendable SOL. Same size every trade." },
   { key: "slippage_pct", label: "Slippage %", group: "size", kind: "number", hint: "Live swap slippage cap" },
   { key: "paper_slippage_pct", label: "Paper slippage (typical)", group: "size", kind: "number", hint: "Assumed real slippage on paper fills — 2–3% typical on the curve. Not the live cap." },
+  { key: "sell_aggressiveness", label: "Sell aggressiveness", group: "size", kind: "number", hint: "0–100 dial: 0 = first sell at 2.1× bank 20%, 100 = scalp everything at 1.3×." },
   { key: "jito_tip_sol", label: "Jito tip (SOL)", group: "size", kind: "number", hint: "Tip attached to live txs and sent via Jito." },
   { key: "max_open_positions", label: "Max open positions", group: "size", kind: "number" },
   { key: "max_buys_per_dev_hours", label: "Max buys per dev (hours)", group: "size", kind: "number" },
@@ -120,6 +122,18 @@ export const CONFIG_META: {
   { key: "smart_file", label: "Smart file", group: "files", kind: "string" },
   { key: "log_file", label: "Log file", group: "files", kind: "string" },
 ];
+
+/**
+ * The aggressiveness dial (0–100) maps to one feel:
+ * - first bank multiple: 2.1× (dial 0) → 1.3× (dial 100)
+ * - bank fraction of the bag: 20% (dial 0) → 100% scalp (dial 100)
+ */
+export function bankParams(cfg: BotConfig): { firstMult: number; bankFrac: number } {
+  const a = Math.min(100, Math.max(0, cfg.sell_aggressiveness));
+  const firstMult = 2.1 - (a / 100) * 0.8;
+  const bankFrac = 0.2 + (a / 100) * 0.8;
+  return { firstMult, bankFrac };
+}
 
 export function parseYamlConfig(text: string): Partial<BotConfig> {
   const out: Partial<BotConfig> = {};

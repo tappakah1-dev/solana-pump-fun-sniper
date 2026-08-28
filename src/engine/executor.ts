@@ -14,6 +14,9 @@ export interface ExecResult {
 /** Priority fee (200k microLamports × 250k CU) + base fee ≈ 0.000055 SOL per paper tx. */
 const PAPER_TX_FEE_SOL = 0.000_055;
 
+/** No partial sell whose gross is below this — fees (tip + priority) would eat it. */
+export const MIN_SELL_GROSS_SOL = 0.005;
+
 /** Paper ticket cost: ticket + Jito tip + priority/base fees. */
 function paperBuyCost(cfg: BotConfig): number {
   return cfg.ticket_sol + cfg.jito_tip_sol + PAPER_TX_FEE_SOL;
@@ -121,6 +124,27 @@ export function applyIntent(
     const fraction = intent.kind === "SELL_ALL" ? 1 : Math.min(1, Math.max(0, intent.fraction ?? 0));
     const soldTokens = pos.tokens_left * fraction;
     const fullVal = leftoverValueSol(pos, mcap);
+    if (
+      intent.kind === "SELL_FRACTION" &&
+      intent.soldSol == null && // live sells were already floor-checked pre-swap
+      fraction > 0 &&
+      fullVal * fraction < MIN_SELL_GROSS_SOL
+    ) {
+      logs.push(
+        intentToLog(
+          {
+            kind: "LOG_ONLY",
+            level: "INFO",
+            reason: "fee_floor_skip",
+            msg: `THINK clip skipped — gross ${(fullVal * fraction).toFixed(4)} SOL below fee floor ${MIN_SELL_GROSS_SOL}`,
+          },
+          now,
+          cfg,
+          pos,
+        ),
+      );
+      return { logs, position: pos, walletDelta: 0 };
+    }
     const paper = intent.soldSol == null;
     const soldSol = intent.soldSol ?? paperSellProceeds(fullVal * fraction, cfg);
     const next: Position = {

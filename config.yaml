@@ -10,6 +10,7 @@ ws_url: ""
 ticket_sol: 0.05
 slippage_pct: 25
 paper_slippage_pct: 3
+sell_aggressiveness: 0
 jito_tip_sol: 0.0002
 max_open_positions: 3
 max_buys_per_dev_hours: 8

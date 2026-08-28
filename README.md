@@ -23,6 +23,10 @@ Not financial advice. You can lose the entire ticket. You will, often.
   `MOONBAG`
 - At +110% (2.1× fill): **peel 20%**, arm rent (cannot cancel), trail the other
   ~30% of the original bag while tape is ripping, fire on fade / −12% / 3×
+- **Sell aggressiveness dial** (0–100, on the desk): 0 = classic (first sell
+  2.1×, bank 20%); 100 = scalp everything at 1.3×. The dial maps one feel —
+  first-sell multiple and bank fraction — and a fee floor (~0.005 SOL gross)
+  always protects tiny clips so fees never eat a sell
 - After rent, a **sell agent** classifies tape (RIPPING / HEALTHY / WEAKENING /
   DEAD) and sizes clips, flatten, or moonbag. THINK lines show the decision.
 - Sells graduated coins on **PumpSwap**, not as “liquidity gone”

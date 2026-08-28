@@ -348,7 +348,7 @@ describe("flatline dead band", () => {
 });
 
 describe("rent tag during shakeout", () => {
-  it("2.1× during shakeout → SEEK_RENT now, peel fires on next tick", () => {
+  it("2.1× during shakeout → early bank 20%, trail arms next tick", () => {
     const e = engine();
     const pos = buyAt(e, 5600);
     e.setNow(ORIGIN + 16_000);
@@ -359,7 +359,8 @@ describe("rent tag during shakeout", () => {
     e.onSnapshot(snap(e, pos.mint, 15000));
     p = e.positions.get(pos.mint)!;
     assert.equal(p.phase, "SEEK_RENT");
-    assert.ok(e.logs.some((l) => l.reason === "rent_tag_in_shakeout"));
+    assert.equal(p.did_early_bank, true);
+    assert.ok(e.logs.some((l) => l.reason === "early_bank"));
     e.setNow(ORIGIN + 31_000);
     e.onSnapshot(snap(e, pos.mint, 15000));
     p = e.positions.get(pos.mint)!;
@@ -396,7 +397,65 @@ describe("rent tag during shakeout", () => {
     e.onSnapshot(snap(e, pos.mint, 7000));
     const p = e.positions.get(pos.mint)!;
     assert.equal(p.phase, "SHAKEOUT");
-    assert.ok(!e.logs.some((l) => l.reason === "rent_tag_in_shakeout"));
+    assert.ok(!e.logs.some((l) => l.reason === "early_bank"));
+  });
+});
+
+describe("sell aggressiveness dial", () => {
+  it("dial 100 scalps everything at 1.3×", () => {
+    const e = engine({ sell_aggressiveness: 100 });
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 40_000);
+    e.onSnapshot(snap(e, pos.mint, 7600)); // 1.318× of the 5768 cost-adjusted fill
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.equal(p.tokens_left, 0);
+    assert.ok(e.logs.some((l) => l.reason === "scalp_exit"));
+  });
+
+  it("dial 50 banks 60% at 1.7× and the rest rides", () => {
+    const e = engine({ sell_aggressiveness: 50 });
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 40_000);
+    e.onSnapshot(snap(e, pos.mint, 9900)); // 1.716× of 5768
+    const p = e.positions.get(pos.mint)!;
+    assert.notEqual(p.phase, "CLOSED");
+    assert.equal(p.did_early_bank, true);
+    assert.ok(Math.abs(p.tokens_left / p.tokens_bought - 0.4) < 1e-6);
+    assert.ok(e.logs.some((l) => l.reason === "early_bank"));
+  });
+
+  it("dial 0 behaves like today: no bank below 2.1×", () => {
+    const e = engine({ sell_aggressiveness: 0 });
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 60_000);
+    e.onSnapshot(snap(e, pos.mint, 9000)); // 1.56× — below the 2.1× tag
+    const p = e.positions.get(pos.mint)!;
+    assert.notEqual(p.phase, "CLOSED");
+    assert.equal(p.did_early_bank, false);
+    assert.ok(!e.logs.some((l) => l.reason === "early_bank" || l.reason === "scalp_exit"));
+  });
+
+  it("a manual clip below the fee floor is skipped, not executed", () => {
+    const e = engine({ sell_aggressiveness: 50, ticket_sol: 0.02 });
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 40_000);
+    e.onSnapshot(snap(e, pos.mint, 9900));
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.did_early_bank, true);
+    // 25% of the 0.4 remainder at the local high: gross ≈ 0.02×0.4×0.25×1.716 ≈ 0.0034 < 0.005 floor.
+    e.sell25(pos.mint);
+    const after = e.positions.get(pos.mint)!;
+    assert.notEqual(after.phase, "CLOSED");
+    assert.ok(e.logs.some((l) => l.reason === "fee_floor_skip"));
   });
 });
 

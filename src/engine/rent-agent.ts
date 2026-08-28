@@ -107,8 +107,12 @@ export function decideRent(pos: Position, snap: MarketSnapshot, cfg: BotConfig):
   const mult = multipleVsFill(pos, snap.mcap);
   const trigger = rentTriggerMultiple(cfg);
   const cap = cfg.rent_cap_multiple;
-  const peelFrac = clamp01(cfg.rent_peel_fraction);
-  const trailFrac = trailFractionOfRemaining(cfg);
+  // An early bank (aggressiveness dial) counts toward the rent initials:
+  // the 2.1× peel and the trail shrink so the total banked stays ≈ rent_sell_fraction.
+  const banked = clamp01(pos.early_bank_frac || 0);
+  const peelFrac = banked > 0 ? clamp01((cfg.rent_peel_fraction - banked) / (1 - banked)) : clamp01(cfg.rent_peel_fraction);
+  const trailFrac = banked > 0 ? clamp01((cfg.rent_sell_fraction - banked) / (1 - banked)) : trailFractionOfRemaining(cfg);
+  const initialsLeft = cfg.rent_sell_fraction - banked > 1e-9;
   const armed = Boolean(pos.rent_armed || pos.did_rent_peel);
   const peaks = peakFields(pos, snap, armed);
   const ticking: Position = { ...pos, ...peaks };
@@ -141,11 +145,17 @@ export function decideRent(pos: Position, snap: MarketSnapshot, cfg: BotConfig):
         `THINK RENT ${fmtX(mult)} waiting for ${fmtX(trigger)} tag`,
       );
     }
-    // Gapped through 2.1× and the cap in one print — take the full 50% now.
+    // Gapped through 2.1× and the cap in one print — take the rest of the
+    // initials now (the early bank already covered its part).
     if (mult >= cap) {
-      const think = `THINK RENT ${fmtX(mult)} gapped to cap → sell ${Math.round(cfg.rent_sell_fraction * 100)}% (initials + 3×)`;
+      const fraction = banked > 0 ? trailFrac : cfg.rent_sell_fraction;
+      const pct = Math.round(fraction * 100);
+      const think =
+        banked > 0
+          ? `THINK RENT ${fmtX(mult)} gapped to cap → sell ${pct}% remaining (early bank ${Math.round(banked * 100)}% + initials + 3×)`
+          : `THINK RENT ${fmtX(mult)} gapped to cap → sell ${Math.round(cfg.rent_sell_fraction * 100)}% (initials + 3×)`;
       return finish(
-        { type: "TRAIL", fraction: cfg.rent_sell_fraction, mark3x: true },
+        { type: "TRAIL", fraction, mark3x: true },
         "cap",
         "rent_110",
         think,
@@ -160,6 +170,28 @@ export function decideRent(pos: Position, snap: MarketSnapshot, cfg: BotConfig):
           hit_rungs: [...new Set([...(pos.hit_rungs ?? []), "3x"])],
           phase: "STUB",
           last_action: "RENT",
+        },
+      );
+    }
+    if (banked > 0) {
+      // The early bank was the peel — arm the trail and hold.
+      const think =
+        initialsLeft
+          ? `THINK RENT ${fmtX(mult)} early bank done (${Math.round(banked * 100)}%) — trailing the rest`
+          : `THINK RENT ${fmtX(mult)} initials already banked — stub rides on`;
+      return finish(
+        { type: "HOLD" },
+        "peel",
+        "rent_trail_hold",
+        think,
+        {
+          rent_armed: true,
+          did_rent_peel: true,
+          rent_peak_mcap: snap.mcap,
+          rent_peak_buy_sol: snap.buy_sol,
+          rent_ticks_since_arm: 0,
+          last_action: "RENT_TRAIL",
+          ...(!initialsLeft ? { did_rent: true, phase: "STUB" } : {}),
         },
       );
     }

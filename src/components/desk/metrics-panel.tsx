@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { useBotStore } from "@/store/bot-store.ts";
 import type { BotConfig } from "@/engine/models.ts";
+import { bankParams } from "@/engine/settings.ts";
 
 interface Metric {
   key: keyof BotConfig;
@@ -85,6 +86,39 @@ function MetricInput({ m }: { m: Metric }) {
   );
 }
 
+function AggressionDial() {
+  const config = useBotStore((s) => s.config);
+  const setConfigField = useBotStore((s) => s.setConfigField);
+  const { firstMult, bankFrac } = bankParams(config);
+  return (
+    <Label className="mt-4 grid gap-1">
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="text-sm text-fg">Sell aggressiveness</span>
+        <span className="font-mono text-xs tabular-nums text-subtle">
+          first sell {firstMult.toFixed(1)}× · bank {Math.round(bankFrac * 100)}%
+        </span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={config.sell_aggressiveness}
+        onChange={(e) => setConfigField("sell_aggressiveness", Number(e.target.value))}
+        className="mcap-slider w-full"
+      />
+      <div className="flex justify-between font-mono text-[10px] text-subtle">
+        <span>hold (2.1×)</span>
+        <span>scalp (1.3×)</span>
+      </div>
+      <span className="text-xs text-subtle">
+        Drag: 0 = bank 20% at 2.1×. 100 = scalp everything at 1.3×. The fee floor
+        (~0.005 SOL gross) protects tiny clips.
+      </span>
+    </Label>
+  );
+}
+
 export function MetricsPanel() {
   const config = useBotStore((s) => s.config);
   const setConfigField = useBotStore((s) => s.setConfigField);
@@ -93,9 +127,8 @@ export function MetricsPanel() {
     <section className="rounded-xl border border-border bg-surface p-4">
       <h2 className="text-sm font-medium text-fg">Buy metrics</h2>
       <p className="mt-1 text-sm text-muted text-pretty">
-        Fixed ticket. Same size every trade. At +110% peel 20% (rent armed, cannot cancel). The
-        rest of initials trails until a fade, −12% giveback, or 3×. Then the sell agent owns the
-        stub: clip a ripping 100k+, flatten a 20–50k death, moonbag only a real leftover.
+        Fixed ticket. Same size every trade. The aggressiveness dial banks profit on the way up;
+        the rent peel/trail and the sell agent own the rest.
       </p>
 
       <Label className="mt-4 grid gap-1">
@@ -114,6 +147,8 @@ export function MetricsPanel() {
           Spendable SOL per ticket. Maps to Pump.fun buy_exact_sol_in.
         </span>
       </Label>
+
+      <AggressionDial />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {PRIMARY.map((m) => (

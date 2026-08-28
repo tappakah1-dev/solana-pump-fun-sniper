@@ -12,7 +12,7 @@ import { AllowList } from "./allowlist.ts";
 import { DEFAULT_CONFIG } from "./settings.ts";
 import { createRiskState, openPositionCount, type RiskState } from "./risk.ts";
 import { decide, moonbagReady } from "./strategy.ts";
-import { applyIntent, liveArmed, DryRunAdapter, type SwapAdapter } from "./executor.ts";
+import { applyIntent, liveArmed, DryRunAdapter, MIN_SELL_GROSS_SOL, type SwapAdapter } from "./executor.ts";
 import { looksLikeSecret } from "./logger.ts";
 
 export interface EngineOpts {
@@ -251,6 +251,30 @@ export class BotEngine {
           };
         } else if (intent.kind === "SELL_ALL" || intent.kind === "SELL_FRACTION") {
           const fraction = intent.kind === "SELL_ALL" ? 1 : Math.min(1, Math.max(0, intent.fraction ?? 0));
+          if (intent.kind === "SELL_FRACTION" && fraction > 0 && pos) {
+            const mcap = snap?.mcap ?? pos.last_mcap ?? pos.fill_mcap ?? 0;
+            const gross = mcap > 0 ? leftoverValueSol(pos, mcap) * fraction : 0;
+            if (gross > 0 && gross < MIN_SELL_GROSS_SOL) {
+              this.appendLogs(
+                applyIntent(
+                  {
+                    kind: "LOG_ONLY",
+                    level: "INFO",
+                    reason: "fee_floor_skip",
+                    msg: `THINK clip skipped — gross ${gross.toFixed(4)} SOL below fee floor ${MIN_SELL_GROSS_SOL}`,
+                    mint,
+                  },
+                  this.config,
+                  this.now,
+                  this.risk,
+                  pos,
+                  snap,
+                  { value: this.walletSol },
+                ).logs,
+              );
+              continue;
+            }
+          }
           const r = await this.swap.sell(mint, fraction, pos?.tokens_left);
           if (!r.ok) {
             this.pushError(r.error || "live_sell_failed", mint);
