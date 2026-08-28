@@ -19,6 +19,7 @@ const PHASE_TONE: Record<Phase, string> = {
 export function PositionsTable() {
   const tick = useBotStore((s) => s.tick);
   const rows = useMemo(() => useBotStore.getState().rows(), [tick]);
+  const sell25 = useBotStore((s) => s.sell25);
   const sell50 = useBotStore((s) => s.sell50);
   const sellAll = useBotStore((s) => s.sellAll);
   void tick;
@@ -86,6 +87,15 @@ export function PositionsTable() {
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2"
+                        disabled={r.pos.phase === "CLOSED" || r.pos.tokens_left <= 0}
+                        onClick={() => sell25(r.pos.mint)}
+                      >
+                        25%
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"

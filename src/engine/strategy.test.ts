@@ -416,6 +416,32 @@ describe("open ignore", () => {
   });
 });
 
+describe("manual sells", () => {
+  it("sell 25% leaves 75%, then sell 50% leaves 37.5%", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.sell25(pos.mint);
+    let p = e.positions.get(pos.mint)!;
+    assert.ok(Math.abs(p.tokens_left / p.tokens_bought - 0.75) < 1e-6);
+    assert.ok(e.logs.some((l) => l.reason === "manual_25"));
+    e.sell50(pos.mint);
+    p = e.positions.get(pos.mint)!;
+    assert.ok(Math.abs(p.tokens_left / p.tokens_bought - 0.375) < 1e-6);
+    assert.ok(e.logs.some((l) => l.reason === "manual_50"));
+  });
+
+  it("sell all closes the position and stamps closed_ts", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.sellAll(pos.mint);
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.equal(p.tokens_left, 0);
+    assert.ok(p.closed_ts > 0);
+    assert.ok(e.logs.some((l) => l.reason === "manual_100"));
+  });
+});
+
 describe("rent", () => {
   it("fill 5600, mcap 12600 ripping → peel 20%, still SEEK_RENT", () => {
     const e = engine();

@@ -298,7 +298,7 @@ export const executeSwap = createServerFn({ method: "POST" })
       }
       let tokens = 0;
       if (data.action === "buy") {
-        tokens = await tokenBalanceUi(rpcUrl, publicKey, data.mint);
+        tokens = await tokenBalanceAfterBuy(rpcUrl, publicKey, data.mint, data.amount);
       }
       return {
         ok: true as const,
@@ -339,4 +339,37 @@ async function tokenBalanceUi(rpcUrl: string, owner: string, mint: string): Prom
     /* ignore */
   }
   return 0;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Fill size after a live buy. The RPC-send path returns before confirmation,
+ * so the first balance read can be 0 (the ATA does not exist yet). Poll until
+ * the balance appears, then fall back to a curve estimate so the desk never
+ * tracks a real position as zero tokens (which would kill the manual sells).
+ */
+async function tokenBalanceAfterBuy(rpcUrl: string, owner: string, mint: string, solIn: number): Promise<number> {
+  for (let i = 0; i < 6; i++) {
+    const tokens = await tokenBalanceUi(rpcUrl, owner, mint);
+    if (tokens > 0) return tokens;
+    await sleep(2_000);
+  }
+  return curveTokensEstimate(mint, solIn);
+}
+
+/** Approximate tokens from the bonding curve state, shaved 3% so a sell never exceeds the real balance. */
+async function curveTokensEstimate(mint: string, solIn: number): Promise<number> {
+  try {
+    const coin = (await fetchCoin({ data: { mint } })) as PumpCoin;
+    const vs = Number(coin.virtual_sol_reserves);
+    const supply = Number(coin.total_supply) || 1_000_000_000_000_000;
+    if (!(vs > 0)) return 0;
+    const tokens = supply * ((solIn * 1e9) / vs);
+    return Math.max(0, Math.floor(tokens * 0.97));
+  } catch {
+    return 0;
+  }
 }

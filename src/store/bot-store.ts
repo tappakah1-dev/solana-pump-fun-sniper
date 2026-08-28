@@ -127,6 +127,7 @@ interface BotState {
   playReplay: () => void;
   pauseReplay: () => void;
   setReplayT: (t: number) => void;
+  sell25: (mint: string) => void;
   sell50: (mint: string) => void;
   sellAll: (mint: string) => void;
   forceMoonbag: (mint: string) => void;
@@ -551,6 +552,12 @@ export const useBotStore = create<BotState>((set, get) => {
       get().bump();
     },
 
+    sell25: (mint) => {
+      const { engine } = get();
+      engine.sell25(mint);
+      void engine.settleUnsettled().then(() => get().bump());
+      get().bump();
+    },
     sell50: (mint) => {
       const { engine } = get();
       engine.sell50(mint);

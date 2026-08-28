@@ -154,6 +154,10 @@ export class BotEngine {
     return this.dispatch({ type: "SNAPSHOT", snapshot, replay });
   }
 
+  sell25(mint: string) {
+    return this.dispatch({ type: "MANUAL_SELL_25", mint });
+  }
+
   sell50(mint: string) {
     return this.dispatch({ type: "MANUAL_SELL_50", mint });
   }

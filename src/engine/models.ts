@@ -191,6 +191,7 @@ export interface MarketSnapshot {
 export type StrategyEvent =
   | { type: "CREATE"; create: TokenCreate; replay?: boolean }
   | { type: "SNAPSHOT"; snapshot: MarketSnapshot; replay?: boolean }
+  | { type: "MANUAL_SELL_25"; mint: string }
   | { type: "MANUAL_SELL_50"; mint: string }
   | { type: "MANUAL_SELL_ALL"; mint: string }
   | { type: "FORCE_MOONBAG"; mint: string }

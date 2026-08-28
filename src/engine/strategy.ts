@@ -1122,18 +1122,20 @@ function handleManual(input: DecideInput): Intent[] {
       }),
     ];
   }
-  if (ev.type === "MANUAL_SELL_50") {
+  if (ev.type === "MANUAL_SELL_25" || ev.type === "MANUAL_SELL_50") {
     if (pos.tokens_left <= 0) {
       return [log({ level: "ERROR", reason: "empty", msg: "nothing left to sell", mint: pos.mint })];
     }
+    const fraction = ev.type === "MANUAL_SELL_25" ? 0.25 : 0.5;
+    const reason = ev.type === "MANUAL_SELL_25" ? "manual_25" : "manual_50";
     return [
       annotate(
         {
           kind: "SELL_FRACTION",
           level: "SELL",
-          reason: "manual_50",
-          fraction: 0.5,
-          msg: `manual sold=50%`,
+          reason,
+          fraction,
+          msg: `manual sold=${Math.round(fraction * 100)}%`,
         },
         pos,
       ),
