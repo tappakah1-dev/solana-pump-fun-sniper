@@ -88,6 +88,12 @@ export function SettingsPanel() {
             <p className="text-xs text-muted text-pretty">
               Type I UNDERSTAND to arm live buys. The key never appears in the UI, logs, or GitHub.
             </p>
+            {!config.dry_run && !config.live_any_socials && engine.allow.entries.length === 0 ? (
+              <p className="mt-2 rounded-md border border-live/30 bg-live/10 px-2 py-1.5 text-xs text-live">
+                No trusted DEV wallets and “Live: any coin with socials” is off — armed live would skip
+                every coin.
+              </p>
+            ) : null}
             <Label className="mt-3 grid gap-1">
               Confirmation
               <Input

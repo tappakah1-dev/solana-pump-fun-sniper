@@ -298,6 +298,9 @@ export const useBotStore = create<BotState>((set, get) => {
         }
         const cfg = { ...get().config, live: true, dry_run: false };
         get().engine.setConfig(cfg);
+        // Fresh live book: paper positions must not occupy live ticket slots
+        // or carry paper risk (daily loss, cooldowns) into live trading.
+        get().engine.resetBook();
         set({ understood: true, config: cfg });
         get().persistAll();
         void get().refreshWalletStatus();

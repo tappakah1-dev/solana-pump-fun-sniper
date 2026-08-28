@@ -19,6 +19,17 @@ export function Desk() {
     void refreshWalletStatus();
   }, [refreshWalletStatus]);
 
+  // Wallet env lookups can fail on a cold start (serverless warm-up). Retry in
+  // the background until the wallet public key is known, so the balance and
+  // live status stop looking frozen after a deploy.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const s = useBotStore.getState();
+      if (!s.engine.walletPublicKey) void s.refreshWalletStatus();
+    }, 15_000);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <div className="flex min-h-dvh flex-col bg-bg text-fg">
       <HeaderBar />

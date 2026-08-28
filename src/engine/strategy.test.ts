@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { BotEngine } from "./engine.ts";
 import { DEFAULT_CONFIG } from "./settings.ts";
-import { DEFAULT_ALLOW_TXT } from "./allowlist.ts";
+import { DEFAULT_ALLOW_TXT, EMPTY_ALLOW_TXT } from "./allowlist.ts";
 import { leftoverValueSol } from "./models.ts";
 import {
   ALLOW_CREATOR,
@@ -14,10 +14,10 @@ import type { MarketSnapshot, TokenCreate } from "./models.ts";
 
 const ORIGIN = Date.parse("2026-08-27T10:00:00Z");
 
-function engine(cfg: Partial<typeof DEFAULT_CONFIG> = {}) {
+function engine(cfg: Partial<typeof DEFAULT_CONFIG> = {}, allowText = DEFAULT_ALLOW_TXT) {
   return new BotEngine({
     config: { ...DEFAULT_CONFIG, ...cfg },
-    allowText: DEFAULT_ALLOW_TXT,
+    allowText,
     now: ORIGIN,
   });
 }
@@ -168,6 +168,45 @@ describe("live any-socials universe", () => {
     const e = engine({ dry_run: true, live: false, dry_run_any_socials: false, live_any_socials: true });
     e.onCreate(create({ creator: OTHER_CREATOR, symbol: "XYZ", name: "Xyz" }));
     e.onSnapshot(snap(e, "MintBiz111111111111111111111111111111111", 5600, { creator: OTHER_CREATOR }));
+    assert.ok(!e.logs.some((l) => l.level === "BUY"));
+    assert.ok(e.logs.some((l) => l.reason === "not_on_allowlist"));
+  });
+
+  it("empty allow-list + toggle → still buys any coin with socials", () => {
+    const e = engine(
+      { dry_run: false, live: true, live_any_socials: true },
+      EMPTY_ALLOW_TXT,
+    );
+    const mint = "MintNoList11111111111111111111111111111111";
+    e.onCreate(
+      create({
+        mint,
+        creator: OTHER_CREATOR,
+        symbol: "FREE",
+        name: "Free",
+        socials: { twitter: "https://x.com/free" },
+      }),
+    );
+    e.onSnapshot(
+      snap(e, mint, 5600, {
+        creator: OTHER_CREATOR,
+        socials: { twitter: "https://x.com/free" },
+        name: "Free",
+        symbol: "FREE",
+      }),
+    );
+    assert.ok(e.logs.some((l) => l.level === "BUY" && l.reason === "live_any_socials"));
+    assert.ok(!e.logs.some((l) => l.reason === "not_on_allowlist"));
+  });
+
+  it("live + dry_run + toggle (half-armed) still skips non-allow coins", () => {
+    const e = engine(
+      { dry_run: true, live: true, dry_run_any_socials: false, live_any_socials: true },
+      EMPTY_ALLOW_TXT,
+    );
+    const mint = "MintHalf111111111111111111111111111111111";
+    e.onCreate(create({ mint, creator: OTHER_CREATOR, symbol: "HALF", name: "Half" }));
+    e.onSnapshot(snap(e, mint, 5600, { creator: OTHER_CREATOR, name: "Half", symbol: "HALF" }));
     assert.ok(!e.logs.some((l) => l.level === "BUY"));
     assert.ok(e.logs.some((l) => l.reason === "not_on_allowlist"));
   });

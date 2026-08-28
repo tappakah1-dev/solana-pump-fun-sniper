@@ -84,7 +84,6 @@ export function TrustedDevs() {
         </span>
         <Switch
           checked={config.live_any_socials}
-          disabled={config.dry_run}
           onCheckedChange={(v) => setConfigField("live_any_socials", v)}
         />
       </Label>
