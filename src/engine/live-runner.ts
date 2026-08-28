@@ -1,5 +1,5 @@
 import type { BotEngine } from "./engine.ts";
-import type { MarketSnapshot } from "./models.ts";
+import type { MarketSnapshot, Position } from "./models.ts";
 import { hasSocials } from "./models.ts";
 import {
   coinToCreate,
@@ -15,6 +15,7 @@ import {
   fetchSolPrice,
   executeSwap,
   fetchWalletBalance,
+  tokenBalance,
 } from "@/lib/pump/server.ts";
 
 export const DEFAULT_RPC = "https://solana-rpc.publicnode.com";
@@ -45,6 +46,7 @@ let posInFlight = false;
 const seen = new Set<string>();
 const prevUnique = new Map<string, number>();
 const prevDev = new Map<string, number>();
+const lastBalanceCheck = new Map<string, number>();
 let consecutiveErrors = 0;
 let coinsSeen = 0;
 let solUsd = 0;
@@ -66,6 +68,37 @@ function makeTransport(getEngine: () => BotEngine, getSession?: () => string | u
       });
     },
   };
+}
+
+/**
+ * Positions bought before the fill-size fix can sit with tokens_left=0 — the
+ * manual sell buttons are dead on them. Re-read the wallet balance and patch
+ * the position so those positions become sellable again. Throttled per mint.
+ */
+async function repairLostTokens(engine: BotEngine, pos: Position, mint: string) {
+  if (pos.tokens_left > 0 || !pos.fill_sol || !engine.walletPublicKey) return;
+  const last = lastBalanceCheck.get(mint) ?? 0;
+  if (Date.now() - last < 30_000) return;
+  lastBalanceCheck.set(mint, Date.now());
+  try {
+    const r = await tokenBalance({
+      data: { mint, publicKey: engine.walletPublicKey, rpcUrl: resolveRpc(engine.config.rpc_url) },
+    });
+    if (r.tokens > 0) {
+      engine.patchPosition(mint, { tokens_bought: r.tokens, tokens_left: r.tokens });
+      engine.applyAll([
+        {
+          kind: "LOG_ONLY",
+          level: "INFO",
+          reason: "balance_repatch",
+          msg: `balance re-read tokens=${r.tokens} (manual sells enabled)`,
+          mint,
+        },
+      ]);
+    }
+  } catch {
+    /* retry next window */
+  }
 }
 
 async function refreshWallet(engine: BotEngine) {
@@ -249,18 +282,19 @@ async function tickPositions(hooks: LiveRunnerHooks) {
       open.map(async (pos) => {
         try {
           const snap = await snapshotMint(engine, pos.mint);
-          return { mint: pos.mint, snap };
+          return { mint: pos.mint, snap, pos };
         } catch {
-          return { mint: pos.mint, snap: null };
+          return { mint: pos.mint, snap: null, pos };
         }
       }),
     );
-    for (const { mint, snap } of fetched) {
+    for (const { mint, snap, pos } of fetched) {
       if (!snap || snap.mcap <= 0) continue;
       engine.setNow(Date.now());
       engine.onSnapshot(snap);
       await engine.settleUnsettled();
       hooks.setMcap(mint, snap.mcap);
+      await repairLostTokens(engine, pos, mint);
     }
     if (fetched.some((f) => f.snap)) {
       hooks.setStatus({ lastPoll: Date.now(), listenerError: null });

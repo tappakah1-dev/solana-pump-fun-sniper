@@ -198,6 +198,7 @@ async function sendSignedTx(
   rpcUrl: string,
   signed: string,
   jitoTipSol: number | undefined,
+  skipPreflight = false,
 ): Promise<{ ok: true; signature: string } | { ok: false; error: string }> {
   const { signatureFromSignedTx } = await import("@/engine/jito.server.ts");
   if (jitoTipSol && jitoTipSol > 0) {
@@ -227,7 +228,7 @@ async function sendSignedTx(
         method: "sendTransaction",
         params: [
           signed,
-          { encoding: "base64", skipPreflight: false, preflightCommitment: "confirmed" },
+          { encoding: "base64", skipPreflight, preflightCommitment: "confirmed" },
         ],
       }),
     });
@@ -292,7 +293,7 @@ export const executeSwap = createServerFn({ method: "POST" })
         return { ok: false as const, tokens: 0, sol: 0, error: built.error || "swap_build_failed" };
       }
       const signed = signEncodedTx(built.tx, key);
-      const sent = await sendSignedTx(rpcUrl, signed, data.jitoTipSol);
+      const sent = await sendSignedTx(rpcUrl, signed, data.jitoTipSol, Boolean(built.simUnverified));
       if (!sent.ok) {
         return { ok: false as const, tokens: 0, sol: 0, error: sent.error };
       }
@@ -310,6 +311,21 @@ export const executeSwap = createServerFn({ method: "POST" })
     } catch (e) {
       return { ok: false as const, tokens: 0, sol: 0, error: safeSwapError(e) };
     }
+  });
+
+/** Read the bot wallet's token balance for a mint (used to repair positions whose fill size was lost). */
+export const tokenBalance = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      mint: z.string().min(32).max(48),
+      publicKey: z.string().min(32).max(48),
+      rpcUrl: z.string().min(8).max(400).optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { readRpcUrl } = await import("@/engine/wallet-env.server.ts");
+    const rpcUrl = readRpcUrl(data.rpcUrl || "https://solana-rpc.publicnode.com");
+    return { tokens: await tokenBalanceUi(rpcUrl, data.publicKey, data.mint) };
   });
 
 async function tokenBalanceUi(rpcUrl: string, owner: string, mint: string): Promise<number> {

@@ -118,6 +118,8 @@ export interface BuildSwapResult {
   tx?: string;
   error?: string;
   via?: "native" | "portal" | "pump-amm";
+  /** Sim kept failing — send with skipPreflight. Only ever set for sells. */
+  simUnverified?: boolean;
 }
 
 async function buildPortal(input: BuildSwapInput): Promise<BuildSwapResult> {
@@ -159,7 +161,7 @@ async function buildPortal(input: BuildSwapInput): Promise<BuildSwapResult> {
   }
 }
 
-async function buildNative(input: BuildSwapInput): Promise<BuildSwapResult> {
+async function buildNative(input: BuildSwapInput, allowUnverifiedSim = false): Promise<BuildSwapResult> {
   if (input.complete) return { ok: false, error: "curve_complete" };
   const connection = new Connection(input.rpcUrl, "confirmed");
   const user = new PublicKey(input.publicKey);
@@ -255,11 +257,29 @@ async function buildNative(input: BuildSwapInput): Promise<BuildSwapResult> {
   tx.add(...ixs);
 
   const vtx = new VersionedTransaction(tx.compileMessage());
-  const sim = await connection.simulateTransaction(vtx, {
+  let sim = await connection.simulateTransaction(vtx, {
     sigVerify: false,
     replaceRecentBlockhash: true,
   });
   if (sim.value.err) {
+    // One fresh attempt — transient sim flake is common on shared RPCs.
+    sim = await connection.simulateTransaction(vtx, {
+      sigVerify: false,
+      replaceRecentBlockhash: true,
+    });
+  }
+  if (sim.value.err) {
+    if (allowUnverifiedSim) {
+      // Sells are deterministic from real account data — a failing sim on a
+      // shared RPC must not block the exit (the portal fallback 418s anyway).
+      const raw = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+      return {
+        ok: true,
+        tx: Buffer.from(raw).toString("base64"),
+        via: "native",
+        simUnverified: true,
+      };
+    }
     const logs = (sim.value.logs ?? []).slice(-4).join(" | ");
     return { ok: false, error: `sim_failed ${logs}`.slice(0, 240) };
   }
@@ -268,9 +288,9 @@ async function buildNative(input: BuildSwapInput): Promise<BuildSwapResult> {
   return { ok: true, tx: Buffer.from(raw).toString("base64"), via: "native" };
 }
 
-async function buildNativeSafe(input: BuildSwapInput): Promise<BuildSwapResult> {
+async function buildNativeSafe(input: BuildSwapInput, allowUnverifiedSim = false): Promise<BuildSwapResult> {
   const attempt = () =>
-    buildNative(input).catch((e: unknown) => ({
+    buildNative(input, allowUnverifiedSim).catch((e: unknown) => ({
       ok: false as const,
       error: e instanceof Error ? e.message : "native_failed",
     }));
@@ -288,7 +308,7 @@ export async function buildSwapTransaction(input: BuildSwapInput): Promise<Build
     if (portal.ok) return portal;
     return { ok: false, error: portal.error || "pumpswap_build_failed" };
   }
-  const native = await buildNativeSafe(input);
+  const native = await buildNativeSafe(input, input.action === "sell");
   if (native.ok) return native;
   if (native.error === "curve_complete") {
     const amm = await buildPortal({ ...input, complete: true });

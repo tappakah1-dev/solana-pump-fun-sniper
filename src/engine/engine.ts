@@ -116,6 +116,12 @@ export class BotEngine {
     return [...this.positions.values()].sort((a, b) => b.fill_ts - a.fill_ts);
   }
 
+  patchPosition(mint: string, fields: Partial<Position>) {
+    const pos = this.positions.get(mint);
+    if (!pos) return;
+    this.positions.set(mint, { ...pos, ...fields });
+  }
+
   private mintFromEvent(ev: StrategyEvent): string | undefined {
     if (ev.type === "CREATE") return ev.create.mint;
     if (ev.type === "SNAPSHOT") return ev.snapshot.mint;
