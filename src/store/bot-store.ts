@@ -560,18 +560,27 @@ export const useBotStore = create<BotState>((set, get) => {
 
     sell25: (mint) => {
       const { engine } = get();
+      engine.applyAll([
+        { kind: "LOG_ONLY", level: "SELL", reason: "manual_sell_clicked", msg: "manual sell 25% clicked", mint },
+      ]);
       engine.sell25(mint);
       void engine.settleUnsettled().then(() => get().bump());
       get().bump();
     },
     sell50: (mint) => {
       const { engine } = get();
+      engine.applyAll([
+        { kind: "LOG_ONLY", level: "SELL", reason: "manual_sell_clicked", msg: "manual sell 50% clicked", mint },
+      ]);
       engine.sell50(mint);
       void engine.settleUnsettled().then(() => get().bump());
       get().bump();
     },
     sellAll: (mint) => {
       const { engine } = get();
+      engine.applyAll([
+        { kind: "LOG_ONLY", level: "SELL", reason: "manual_sell_clicked", msg: "manual sell all clicked", mint },
+      ]);
       engine.sellAll(mint);
       void engine.settleUnsettled().then(() => get().bump());
       get().bump();

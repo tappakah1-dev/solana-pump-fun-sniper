@@ -277,6 +277,23 @@ export class BotEngine {
               continue;
             }
           }
+          this.appendLogs(
+            applyIntent(
+              {
+                kind: "LOG_ONLY",
+                level: "INFO",
+                reason: "sell_attempt",
+                msg: `sell attempt ${Math.round(fraction * 100)}% tokens_left=${pos?.tokens_left ?? 0} amount=${Math.round(((pos?.tokens_left ?? 0) * fraction) * 100) / 100}`,
+                mint,
+              },
+              this.config,
+              this.now,
+              this.risk,
+              pos,
+              snap,
+              { value: this.walletSol },
+            ).logs,
+          );
           const r = await this.swap.sell(mint, fraction, pos?.tokens_left);
           if (!r.ok) {
             this.pushError(r.error || "live_sell_failed", mint);

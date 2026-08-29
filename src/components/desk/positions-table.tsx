@@ -18,11 +18,13 @@ const PHASE_TONE: Record<Phase, string> = {
 
 export function PositionsTable() {
   const tick = useBotStore((s) => s.tick);
+  const engine = useBotStore((s) => s.engine);
   const rows = useMemo(() => useBotStore.getState().rows(), [tick]);
   const sell25 = useBotStore((s) => s.sell25);
   const sell50 = useBotStore((s) => s.sell50);
   const sellAll = useBotStore((s) => s.sellAll);
   void tick;
+  const live = engine.isLiveArmed();
 
   return (
     <section className="flex h-[22rem] min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface">
@@ -123,6 +125,11 @@ export function PositionsTable() {
                         All
                       </Button>
                     </div>
+                    {live && r.pos.tokens_left <= 0 ? (
+                      <div className="mt-1 text-[10px] text-live">
+                        0 tokens — balance repair pending (60s)
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               ))}
