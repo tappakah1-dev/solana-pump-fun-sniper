@@ -86,7 +86,29 @@ async function repairLostTokens(engine: BotEngine, pos: Position, mint: string) 
     const r = await tokenBalance({
       data: { mint, publicKey: engine.walletPublicKey, rpcUrl: resolveRpc(engine.config.rpc_url) },
     });
-    if (r.tokens <= 0) return;
+    if (r.tokens <= 0) {
+      // An estimated fill whose real balance never appeared (3+ minutes) was
+      // a tx that never landed — close the phantom instead of trading nothing.
+      if (pos.fill_estimated && Date.now() - pos.fill_ts > 180_000) {
+        engine.patchPosition(mint, {
+          phase: "CLOSED",
+          tokens_left: 0,
+          closed_ts: Date.now(),
+          last_reason: "phantom_closed",
+          last_action: "PHANTOM",
+        });
+        engine.applyAll([
+          {
+            kind: "LOG_ONLY",
+            level: "ERROR",
+            reason: "phantom_closed",
+            msg: "estimated fill never appeared on-chain — position closed",
+            mint,
+          },
+        ]);
+      }
+      return;
+    }
     if (pos.tokens_left <= 0) {
       engine.patchPosition(mint, { tokens_bought: r.tokens, tokens_left: r.tokens });
       engine.applyAll([

@@ -165,6 +165,8 @@ export interface Position {
   spiked: boolean;
   /** Last known SOL-per-token price from the live snapshot. */
   last_price_sol: number;
+  /** The fill size was a curve estimate, not a wallet-balance read. */
+  fill_estimated: boolean;
 }
 
 export interface TokenCreate {
@@ -327,6 +329,7 @@ export function emptyPosition(partial: Partial<Position> & Pick<Position, "mint"
     closed_ts: 0,
     spiked: false,
     last_price_sol: 0,
+    fill_estimated: false,
     ...partial,
   };
 }

@@ -249,6 +249,7 @@ export class BotEngine {
             tokens_bought: r.tokens,
             tokens_left: r.tokens,
             fill_sol: intent.fillSol,
+            fill_estimated: Boolean(r.estimated),
           };
         } else if (intent.kind === "SELL_ALL" || intent.kind === "SELL_FRACTION") {
           const fraction = intent.kind === "SELL_ALL" ? 1 : Math.min(1, Math.max(0, intent.fraction ?? 0));

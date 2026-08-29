@@ -200,9 +200,9 @@ async function sendSignedTx(
   jitoTipSol: number | undefined,
   skipPreflight = false,
 ): Promise<{ ok: true; signature: string } | { ok: false; error: string }> {
-  const { signatureFromSignedTx } = await import("@/engine/jito.server.ts");
+  const { signatureFromSignedTx, confirmSignature } = await import("@/engine/jito.server.ts");
   if (jitoTipSol && jitoTipSol > 0) {
-    const { sendViaJito, confirmSignature } = await import("@/engine/jito.server.ts");
+    const { sendViaJito } = await import("@/engine/jito.server.ts");
     const jito = await sendViaJito(signed);
     if (jito.ok) {
       const sig = signatureFromSignedTx(signed);
@@ -240,7 +240,14 @@ async function sendSignedTx(
       if (sig && /already processed/i.test(msg)) return { ok: true, signature: sig };
       return { ok: false, error: msg.slice(0, 180) || "send_failed" };
     }
-    return { ok: true, signature: json.result };
+    // The RPC accepted the tx — but accepted is not landed. Confirm it before
+    // reporting success, otherwise the desk books a phantom fill (the buy-side
+    // curve estimate would fabricate tokens for a tx that never landed).
+    const sig = signatureFromSignedTx(signed) ?? json.result;
+    const status = await confirmSignature(rpcUrl, sig, 20_000);
+    if (status === "confirmed") return { ok: true, signature: sig };
+    if (status === "landed_err") return { ok: false, error: "tx_landed_error" };
+    return { ok: false, error: "tx_not_confirmed" };
   } finally {
     clearTimeout(t);
   }
@@ -299,8 +306,11 @@ export const executeSwap = createServerFn({ method: "POST" })
       }
       let tokens = 0;
       let solProceeds = 0;
+      let estimated = false;
       if (data.action === "buy") {
-        tokens = await tokenBalanceAfterBuy(rpcUrl, publicKey, data.mint, data.amount);
+        const bt = await tokenBalanceAfterBuy(rpcUrl, publicKey, data.mint, data.amount);
+        tokens = bt.tokens;
+        estimated = bt.estimated;
         solProceeds = data.denominatedInSol ? data.amount : 0;
       } else {
         // Sells: the desk must book what actually came back — read the tx's
@@ -310,6 +320,7 @@ export const executeSwap = createServerFn({ method: "POST" })
       return {
         ok: true as const,
         tokens,
+        estimated,
         sol: solProceeds,
         signature: sent.signature,
         via: built.via,
@@ -414,13 +425,18 @@ async function solDeltaFromTx(rpcUrl: string, signature: string, userPubkey: str
  * the balance appears, then fall back to a curve estimate so the desk never
  * tracks a real position as zero tokens (which would kill the manual sells).
  */
-async function tokenBalanceAfterBuy(rpcUrl: string, owner: string, mint: string, solIn: number): Promise<number> {
+async function tokenBalanceAfterBuy(
+  rpcUrl: string,
+  owner: string,
+  mint: string,
+  solIn: number,
+): Promise<{ tokens: number; estimated: boolean }> {
   for (let i = 0; i < 6; i++) {
     const tokens = await tokenBalanceUi(rpcUrl, owner, mint);
-    if (tokens > 0) return tokens;
+    if (tokens > 0) return { tokens, estimated: false };
     await sleep(2_000);
   }
-  return curveTokensEstimate(mint, solIn);
+  return { tokens: await curveTokensEstimate(mint, solIn), estimated: true };
 }
 
 /** Approximate tokens from the bonding curve state, shaved 3% so a sell never exceeds the real balance. */
