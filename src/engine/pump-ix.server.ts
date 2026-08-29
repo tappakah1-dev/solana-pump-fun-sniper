@@ -8,6 +8,7 @@ import {
   VersionedTransaction,
 } from "@solana/web3.js";
 import { jitoTipIx } from "./jito.server.ts";
+import { TOKEN_UNIT } from "./models.ts";
 
 const PUMP = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
 const FEE_PROGRAM = new PublicKey("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
@@ -125,11 +126,15 @@ export interface BuildSwapResult {
 async function buildPortal(input: BuildSwapInput): Promise<BuildSwapResult> {
   const tip = input.jitoTipSol && input.jitoTipSol > 0 ? String(input.jitoTipSol) : "0.0002";
   const pool = input.complete ? "pump-amm" : "auto";
+  // Token-count sells (pump-amm via the portal) are RAW units too — ×1e6.
+  const portalAmount = input.denominatedInSol
+    ? input.amount
+    : Math.max(1, Math.floor(input.amount * TOKEN_UNIT));
   const body = new URLSearchParams({
     publicKey: input.publicKey,
     action: input.action,
     mint: input.mint,
-    amount: String(input.amount),
+    amount: String(portalAmount),
     denominatedInSol: input.denominatedInSol ? "true" : "false",
     slippage: String(Math.round(input.slippagePct ?? 25)),
     priorityFee: tip,
@@ -225,7 +230,8 @@ async function buildNative(input: BuildSwapInput, allowUnverifiedSim = false): P
       }),
     );
   } else {
-    const amountTokens = BigInt(Math.max(1, Math.floor(input.amount)));
+    // The desk tracks tokens in UI units; the program's sell wants RAW units (×1e6).
+    const amountTokens = BigInt(Math.max(1, Math.floor(input.amount * TOKEN_UNIT)));
     const data = Buffer.concat([SELL_DISC, u64(amountTokens), u64(1n)]);
     const keys = [
       { pubkey: PUMP_GLOBAL, isSigner: false, isWritable: false },

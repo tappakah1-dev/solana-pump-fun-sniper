@@ -66,6 +66,7 @@ function patchFromSnap(pos: Position, snap: MarketSnapshot): Partial<Position> {
     stall_bars: stall,
     last_mcap: snap.mcap,
     spiked,
+    last_price_sol: snap.price_sol || pos.last_price_sol,
   };
 }
 

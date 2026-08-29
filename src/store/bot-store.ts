@@ -62,6 +62,7 @@ function writeSs(key: string, value: string) {
 export interface RowView {
   pos: Position;
   nowMcap: number;
+  priceSol: number;
   multiple: number;
   leftover: number;
   unrealized: number;
@@ -98,6 +99,7 @@ interface BotState {
   logFilter: string;
   panicOpen: boolean;
   mcaps: Record<string, number>;
+  prices: Record<string, number>;
   feed: TapeRow[];
   lastPoll: number;
   listenerError: string | null;
@@ -191,6 +193,7 @@ export const useBotStore = create<BotState>((set, get) => {
     panicOpen: false,
 
     mcaps: {},
+    prices: {},
     feed: [],
     lastPoll: 0,
     listenerError: null,
@@ -235,6 +238,9 @@ export const useBotStore = create<BotState>((set, get) => {
         bump: () => get().bump(),
         setMcap: (mint, mcap) => {
           set((s) => ({ mcaps: { ...s.mcaps, [mint]: mcap }, tick: s.tick + 1 }));
+        },
+        setPrice: (mint, price) => {
+          set((s) => ({ prices: { ...s.prices, [mint]: price }, tick: s.tick + 1 }));
         },
         setStatus: (s) => {
           set((prev) => ({
@@ -587,7 +593,7 @@ export const useBotStore = create<BotState>((set, get) => {
     setPanicOpen: (v) => set({ panicOpen: v }),
 
     rows: () => {
-      const { engine, mcaps, mcapSlider, replayMint } = get();
+      const { engine, mcaps, prices, mcapSlider, replayMint } = get();
       return engine
         .positionList()
         .filter((pos) => isOpenPhase(pos.phase))
@@ -600,6 +606,7 @@ export const useBotStore = create<BotState>((set, get) => {
         return {
           pos,
           nowMcap,
+          priceSol: prices[pos.mint] ?? pos.last_price_sol ?? 0,
           multiple: pos.fill_mcap ? nowMcap / pos.fill_mcap : 0,
           leftover,
           unrealized: leftover - costLeft,

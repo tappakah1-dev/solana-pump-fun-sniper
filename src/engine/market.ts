@@ -56,6 +56,7 @@ export function syntheticSnapshot(
     ts: now,
     mint,
     mcap,
+    price_sol: 0,
     unique_buyers: 40,
     unique_buyers_prev: 36,
     buy_sol: 6,

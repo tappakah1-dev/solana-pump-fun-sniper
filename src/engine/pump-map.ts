@@ -136,10 +136,14 @@ export function snapshotFromMarket(input: SnapshotInput): MarketSnapshot {
     devBal = Math.max(0, prev - creatorSellTokens);
   }
   const graduated = Boolean(input.coin.complete);
+  const vs = Number(input.coin.virtual_sol_reserves);
+  const vt = Number(input.coin.virtual_token_reserves);
+  const priceSol = vs > 0 && vt > 0 ? vs / 1e9 / vt : 0;
   return {
     ts: now,
     mint: input.coin.mint,
     mcap: coinMcapUsd(input.coin, input.solUsd),
+    price_sol: Number.isFinite(priceSol) ? priceSol : 0,
     unique_buyers: unique,
     unique_buyers_prev: input.prevUnique ?? unique,
     buy_sol: buySol,

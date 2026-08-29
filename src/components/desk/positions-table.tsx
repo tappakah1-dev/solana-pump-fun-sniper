@@ -67,6 +67,14 @@ export function PositionsTable() {
                       {shortAddr(r.pos.creator, 4)}
                       {r.pos.venue === "pump-amm" ? " · AMM" : ""}
                     </div>
+                    {r.priceSol > 0 ? (
+                      <div
+                        className="font-mono text-[11px] tabular-nums text-fg"
+                        title="Live SOL per token"
+                      >
+                        {r.priceSol.toFixed(8)} SOL
+                      </div>
+                    ) : null}
                   </td>
                   <td className={`px-3 py-2 ${PHASE_TONE[r.pos.phase]}`}>
                     <Badge

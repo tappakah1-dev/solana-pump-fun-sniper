@@ -163,6 +163,8 @@ export interface Position {
   closed_ts: number;
   /** Printed at least 1.15× fill at some point — a spike happened, noise or runner. */
   spiked: boolean;
+  /** Last known SOL-per-token price from the live snapshot. */
+  last_price_sol: number;
 }
 
 export interface TokenCreate {
@@ -180,6 +182,8 @@ export interface MarketSnapshot {
   ts: number;
   mint: string;
   mcap: number;
+  /** SOL per token, from the bonding-curve reserves. Absent/0 when unknown. */
+  price_sol?: number;
   bonding_curve_progress?: number;
   unique_buyers: number;
   unique_buyers_prev: number;
@@ -320,6 +324,7 @@ export function emptyPosition(partial: Partial<Position> & Pick<Position, "mint"
     last_mcap: 0,
     closed_ts: 0,
     spiked: false,
+    last_price_sol: 0,
     ...partial,
   };
 }

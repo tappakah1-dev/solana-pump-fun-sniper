@@ -29,6 +29,7 @@ export interface LiveRunnerHooks {
   getEngine: () => BotEngine;
   bump: () => void;
   setMcap: (mint: string, mcap: number) => void;
+  setPrice: (mint: string, priceSol: number) => void;
   setStatus: (s: {
     feed?: TapeRow[];
     lastPoll?: number;
@@ -71,20 +72,22 @@ function makeTransport(getEngine: () => BotEngine, getSession?: () => string | u
 }
 
 /**
- * Positions bought before the fill-size fix can sit with tokens_left=0 — the
- * manual sell buttons are dead on them. Re-read the wallet balance and patch
- * the position so those positions become sellable again. Throttled per mint.
+ * Reconcile the desk's tracked tokens with the wallet's real balance:
+ * positions tracked as zero become sellable again (pre-fill-size-fix buys),
+ * and drift from dust sells (the old UI-vs-raw unit bug) is corrected so the
+ * manual buttons sell the real remainder. Throttled per mint, live only.
  */
 async function repairLostTokens(engine: BotEngine, pos: Position, mint: string) {
-  if (pos.tokens_left > 0 || !pos.fill_sol || !engine.walletPublicKey) return;
+  if (!engine.isLiveArmed() || !pos.fill_sol || !engine.walletPublicKey) return;
   const last = lastBalanceCheck.get(mint) ?? 0;
-  if (Date.now() - last < 30_000) return;
+  if (Date.now() - last < 60_000) return;
   lastBalanceCheck.set(mint, Date.now());
   try {
     const r = await tokenBalance({
       data: { mint, publicKey: engine.walletPublicKey, rpcUrl: resolveRpc(engine.config.rpc_url) },
     });
-    if (r.tokens > 0) {
+    if (r.tokens <= 0) return;
+    if (pos.tokens_left <= 0) {
       engine.patchPosition(mint, { tokens_bought: r.tokens, tokens_left: r.tokens });
       engine.applyAll([
         {
@@ -92,6 +95,17 @@ async function repairLostTokens(engine: BotEngine, pos: Position, mint: string) 
           level: "INFO",
           reason: "balance_repatch",
           msg: `balance re-read tokens=${r.tokens} (manual sells enabled)`,
+          mint,
+        },
+      ]);
+    } else if (Math.abs(r.tokens - pos.tokens_left) > Math.max(1, pos.tokens_left * 0.02)) {
+      engine.patchPosition(mint, { tokens_left: r.tokens });
+      engine.applyAll([
+        {
+          kind: "LOG_ONLY",
+          level: "INFO",
+          reason: "balance_reconcile",
+          msg: `balance reconciled tokens=${r.tokens} (was ${pos.tokens_left})`,
           mint,
         },
       ]);
@@ -294,6 +308,7 @@ async function tickPositions(hooks: LiveRunnerHooks) {
       engine.onSnapshot(snap);
       await engine.settleUnsettled();
       hooks.setMcap(mint, snap.mcap);
+      hooks.setPrice(mint, snap.price_sol ?? 0);
       await repairLostTokens(engine, pos, mint);
     }
     if (fetched.some((f) => f.snap)) {
