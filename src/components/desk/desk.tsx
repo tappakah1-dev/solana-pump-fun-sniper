@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { HeaderBar } from "./header-bar.tsx";
 import { ConnectWallet } from "./connect-wallet.tsx";
 import { TrustedDevs } from "./trusted-devs.tsx";
@@ -13,6 +13,12 @@ import { useBotStore } from "@/store/bot-store.ts";
 
 export function Desk() {
   const refreshWalletStatus = useBotStore((s) => s.refreshWalletStatus);
+  // The desk renders saved browser config (dial, metrics, times) that can
+  // never match the server's default-config HTML — server-render a blank
+  // shell and paint client-side only, so hydration can't mismatch and break
+  // the page's event system.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     void refreshWalletStatus();
@@ -28,6 +34,10 @@ export function Desk() {
     }, 15_000);
     return () => clearInterval(id);
   }, []);
+
+  if (!mounted) {
+    return <div className="flex min-h-dvh flex-col bg-bg text-fg" />;
+  }
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg text-fg">
