@@ -114,6 +114,15 @@ describe("allow-list entry", () => {
     assert.ok(e.logs.some((l) => l.reason === "no_socials"));
   });
 
+  it("mayhem coins are always skipped, even allow-listed", () => {
+    const e = engine();
+    const c = create({ mayhem: true });
+    e.onCreate(c);
+    e.onSnapshot(snap(e, c.mint, 5600));
+    assert.ok(!e.logs.some((l) => l.level === "BUY"));
+    assert.ok(e.logs.some((l) => l.reason === "mayhem"));
+  });
+
   it("mcap 15k at decision → skip chase", () => {
     const e = engine();
     const c = create();

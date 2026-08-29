@@ -298,13 +298,19 @@ export const executeSwap = createServerFn({ method: "POST" })
         return { ok: false as const, tokens: 0, sol: 0, error: sent.error };
       }
       let tokens = 0;
+      let solProceeds = 0;
       if (data.action === "buy") {
         tokens = await tokenBalanceAfterBuy(rpcUrl, publicKey, data.mint, data.amount);
+        solProceeds = data.denominatedInSol ? data.amount : 0;
+      } else {
+        // Sells: the desk must book what actually came back — read the tx's
+        // balance delta (net of the Jito tip and fees) from the RPC.
+        solProceeds = await solDeltaFromTx(rpcUrl, sent.signature, publicKey);
       }
       return {
         ok: true as const,
         tokens,
-        sol: data.denominatedInSol ? data.amount : 0,
+        sol: solProceeds,
         signature: sent.signature,
         via: built.via,
       };
@@ -359,6 +365,47 @@ async function tokenBalanceUi(rpcUrl: string, owner: string, mint: string): Prom
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * SOL the wallet actually received for a sell — the tx's balance delta, net of
+ * the Jito tip and priority fees. Retried briefly: the RPC-send path can land
+ * a moment after the signature is returned.
+ */
+async function solDeltaFromTx(rpcUrl: string, signature: string, userPubkey: string): Promise<number> {
+  const url = assertHttpUrl(rpcUrl, "rpc");
+  for (let i = 0; i < 4; i++) {
+    try {
+      const res = await fetch(url.toString(), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "getTransaction",
+          params: [signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }],
+        }),
+      });
+      const json = (await res.json()) as {
+        result?: {
+          meta?: { preBalances?: number[]; postBalances?: number[] };
+          transaction?: { message?: { accountKeys?: ({ pubkey: string } | string)[] } };
+        } | null;
+      };
+      const tx = json.result;
+      if (tx?.meta?.preBalances && tx.meta.postBalances) {
+        const keys = tx.transaction?.message?.accountKeys ?? [];
+        const idx = keys.findIndex((k) => (typeof k === "string" ? k : k.pubkey) === userPubkey);
+        if (idx >= 0 && tx.meta.preBalances[idx] != null && tx.meta.postBalances[idx] != null) {
+          return (tx.meta.postBalances[idx]! - tx.meta.preBalances[idx]!) / 1e9;
+        }
+      }
+    } catch {
+      /* retry */
+    }
+    await sleep(1500);
+  }
+  return 0;
 }
 
 /**

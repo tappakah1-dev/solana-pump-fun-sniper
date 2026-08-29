@@ -24,6 +24,8 @@ export interface PumpCoin {
   image_uri?: string | null;
   pump_swap_pool?: string | null;
   raydium_pool?: string | null;
+  /** Mayhem coins are experimental — the desk always skips them. */
+  mayhem?: boolean | null;
 }
 
 export interface PumpTrade {
@@ -70,6 +72,7 @@ export function coinToCreate(coin: PumpCoin, now = Date.now()): TokenCreate {
     socials: coinSocials(coin),
     metadata_uri: coin.metadata_uri ?? undefined,
     mcap: coinMcapUsd(coin) || undefined,
+    mayhem: Boolean(coin.mayhem),
   };
 }
 

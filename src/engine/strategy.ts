@@ -194,6 +194,18 @@ function entrySkip(
       mcap,
     };
   }
+  if (create.mayhem) {
+    return {
+      kind: "SKIP",
+      level: "SKIP",
+      reason: "mayhem",
+      msg: `${token || shortAddr(create.mint)} mayhem skip (always)`,
+      mint: create.mint,
+      creator,
+      token,
+      mcap,
+    };
+  }
   if (!hasSocials(create.socials)) {
     return {
       kind: "SKIP",
@@ -336,6 +348,7 @@ function handleCreate(create: TokenCreate, input: DecideInput): Intent[] {
   const skip = entrySkip(create, input.config, input, create.mcap);
   if (skip && skip.reason === "not_on_allowlist") return [seen, skip];
   if (skip && skip.reason === "no_socials") return [seen, skip];
+  if (skip && skip.reason === "mayhem") return [seen, skip];
 
   const detect: Intent = {
     kind: "SET_PHASE",

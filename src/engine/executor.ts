@@ -237,7 +237,7 @@ export function liveArmed(g: LiveGate): boolean {
 
 export interface SwapAdapter {
   buy(mint: string, sol: number): Promise<{ ok: boolean; tokens: number; sol?: number; error?: string }>;
-  sell(mint: string, fraction: number, tokens?: number): Promise<{ ok: boolean; sol: number; error?: string }>;
+  sell(mint: string, fraction: number, tokens?: number): Promise<{ ok: boolean; sol: number; error?: string; signature?: string }>;
 }
 
 export class DryRunAdapter implements SwapAdapter {
@@ -259,7 +259,7 @@ export interface SwapTransport {
     complete?: boolean;
     jitoTipSol?: number;
     operatorSession?: string;
-  }): Promise<{ ok: boolean; tokens?: number; sol?: number; error?: string }>;
+  }): Promise<{ ok: boolean; tokens?: number; sol?: number; error?: string; signature?: string }>;
 }
 
 export class LiveSwapAdapter implements SwapAdapter {
@@ -312,6 +312,6 @@ export class LiveSwapAdapter implements SwapAdapter {
       jitoTipSol: this.extras.getTip?.(),
       operatorSession: this.extras.getSession?.(),
     });
-    return { ok: r.ok, sol: r.sol ?? 0, error: r.error };
+    return { ok: r.ok, sol: r.sol ?? 0, error: r.error, signature: r.signature };
   }
 }

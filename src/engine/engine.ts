@@ -282,6 +282,25 @@ export class BotEngine {
             continue;
           }
           intent.soldSol = r.sol;
+          if (r.signature) {
+            this.appendLogs(
+              applyIntent(
+                {
+                  kind: "LOG_ONLY",
+                  level: "SELL",
+                  reason: "sell_confirmed",
+                  msg: `sell sent sig=${r.signature.slice(0, 12)}… proceeds=${r.sol.toFixed(5)} SOL`,
+                  mint,
+                },
+                this.config,
+                this.now,
+                this.risk,
+                pos,
+                snap,
+                { value: this.walletSol },
+              ).logs,
+            );
+          }
         }
         const result = applyIntent(intent, this.config, this.now, this.risk, pos, snap, wallet);
         this.appendLogs(result.logs);

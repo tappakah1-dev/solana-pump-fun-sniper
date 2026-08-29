@@ -180,6 +180,7 @@ function toTape(coin: PumpCoin, engine: BotEngine): TapeRow {
   });
   const paper = paperUniverse(engine) && socials && !allow;
   const anyOpen = liveAnyUniverse(engine) && socials && !allow;
+  const mayhem = Boolean(coin.mayhem);
   return {
     mint: coin.mint,
     name: coin.name || "TOKEN",
@@ -190,7 +191,7 @@ function toTape(coin: PumpCoin, engine: BotEngine): TapeRow {
     allow,
     hasSocials: socials,
     complete: Boolean(coin.complete),
-    tag: allow || anyOpen ? "buy" : paper ? "paper" : "skip",
+    tag: mayhem ? "skip" : allow || anyOpen ? "buy" : paper ? "paper" : "skip",
   };
 }
 
@@ -232,6 +233,7 @@ async function tick(hooks: LiveRunnerHooks) {
       if (seen.has(coin.mint)) continue;
       seen.add(coin.mint);
       coinsSeen += 1;
+      if (coin.mayhem) continue; // experimental coins — never traded
       const age = now - (coin.created_timestamp < 1e12 ? coin.created_timestamp * 1000 : coin.created_timestamp);
       const allow = engine.allow.has(coin.creator);
       const socials = hasSocials({

@@ -176,6 +176,8 @@ export interface TokenCreate {
   socials: Socials;
   metadata_uri?: string;
   mcap?: number;
+  /** Mayhem coins are experimental — always skipped. */
+  mayhem?: boolean;
 }
 
 export interface MarketSnapshot {
