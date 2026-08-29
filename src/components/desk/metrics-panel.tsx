@@ -109,11 +109,13 @@ function AggressionDial() {
       />
       <div className="flex justify-between font-mono text-[10px] text-subtle">
         <span>hold (2.1×)</span>
-        <span>scalp (1.3×)</span>
+        <span>scalp (1.25×)</span>
       </div>
       <span className="text-xs text-subtle">
-        Drag: 0 = bank 20% at 2.1×. 100 = scalp everything at 1.3×. The fee floor
-        (~0.005 SOL gross) protects tiny clips.
+        Drag: 0 = bank 20% at 2.1×. 100 = scalp everything at 1.25×. Dead tape
+        sells harder into a spike; ripping tape holds for the runner. A spiked
+        coin fading below 0.95× on a dead tape exits with a fee-floor-sized
+        resurrection stub. The fee floor (~0.005 SOL gross) protects tiny clips.
       </span>
     </Label>
   );

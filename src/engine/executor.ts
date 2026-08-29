@@ -1,5 +1,5 @@
 import type { BotConfig, Intent, LogEvent, MarketSnapshot, Position } from "./models.ts";
-import { TOKEN_UNIT, emptyPosition, leftoverValueSol } from "./models.ts";
+import { TOKEN_UNIT, MIN_SELL_GROSS_SOL, emptyPosition, leftoverValueSol } from "./models.ts";
 import { applyRealizedDelta, recordBuy, slicePnl, type RiskState } from "./risk.ts";
 import { intentToLog } from "./logger.ts";
 import { moonbagReady } from "./strategy.ts";
@@ -13,9 +13,6 @@ export interface ExecResult {
 
 /** Priority fee (200k microLamports × 250k CU) + base fee ≈ 0.000055 SOL per paper tx. */
 const PAPER_TX_FEE_SOL = 0.000_055;
-
-/** No partial sell whose gross is below this — fees (tip + priority) would eat it. */
-export const MIN_SELL_GROSS_SOL = 0.005;
 
 /** Paper ticket cost: ticket + Jito tip + priority/base fees. */
 function paperBuyCost(cfg: BotConfig): number {

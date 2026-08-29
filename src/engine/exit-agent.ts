@@ -126,6 +126,24 @@ export function classifyTape(pos: Position, snap: MarketSnapshot, cfg: BotConfig
   return "HEALTHY";
 }
 
+/**
+ * Tape quality 0–1, read from the raw signals rather than the drop-heavy
+ * regime: 1 = runner tape (buys dominant, buyers climbing, accelerating),
+ * 0 = noise/dead tape. DEV sells are excluded — the open sells on Pump.fun
+ * are expected and must not read as noise.
+ */
+export function tapeQuality(snap: MarketSnapshot, pos: Position, cfg: BotConfig): number {
+  let q = 0.5;
+  if (sellDominant(snap, cfg)) q -= 0.35;
+  else if (buyDominant(snap, cfg)) q += 0.25;
+  if (uniqueDown(snap, pos)) q -= 0.25;
+  else if (uniqueUp(snap, pos)) q += 0.15;
+  const trail = pushTrail(pos.mcap_trail, snap.mcap);
+  if (accelerating(trail)) q += 0.15;
+  if (pos.local_high > 0 && snap.mcap >= pos.local_high) q += 0.1;
+  return Math.min(1, Math.max(0, q));
+}
+
 function clipFraction(regime: TapeRegime, zone: McapZone): number {
   if (regime === "RIPPING") {
     if (zone === "moon") return 0.12;

@@ -7,11 +7,11 @@ import type {
   StrategyEvent,
   TokenCreate,
 } from "./models.ts";
-import { hasSocials, leftoverValueSol, multipleVsFill } from "./models.ts";
+import { hasSocials, leftoverValueSol, MIN_SELL_GROSS_SOL, multipleVsFill } from "./models.ts";
 import { bankParams } from "./settings.ts";
 import { creatorOnCooldown, dailyLossHit, openPositionCount, type RiskState } from "./risk.ts";
 import { shortAddr } from "../lib/utils.ts";
-import { decideStubExit, moonbagReady, thinkIntent } from "./exit-agent.ts";
+import { decideStubExit, moonbagReady, tapeQuality, thinkIntent } from "./exit-agent.ts";
 import { decideRent } from "./rent-agent.ts";
 
 export interface DecideInput {
@@ -53,6 +53,7 @@ function patchFromSnap(pos: Position, snap: MarketSnapshot): Partial<Position> {
   const venue = snap.graduated ? "pump-amm" : pos.venue;
   const trail = [...(pos.mcap_trail ?? []), snap.mcap].slice(-8);
   const stall = snap.mcap < local_high * 0.98 ? (pos.stall_bars || 0) + 1 : 0;
+  const spiked = pos.spiked || (pos.fill_mcap > 0 && snap.mcap >= pos.fill_mcap * 1.15);
   return {
     local_high,
     last_dev_balance: snap.dev_token_balance,
@@ -64,6 +65,7 @@ function patchFromSnap(pos: Position, snap: MarketSnapshot): Partial<Position> {
     mcap_trail: trail,
     stall_bars: stall,
     last_mcap: snap.mcap,
+    spiked,
   };
 }
 
@@ -494,12 +496,157 @@ function maybeFlatline(
   ];
 }
 
+/** Bank fraction for a print at `mult`: the dial base, scaled toward the
+ *  initials ceiling by overshoot, amplified by noise — dead tape sells harder,
+ *  ripping tape holds for the runner. */
+function bankSize(cfg: BotConfig, mult: number, quality: number): number {
+  const { firstMult, bankFrac } = bankParams(cfg);
+  const ceil = Math.max(bankFrac, cfg.rent_sell_fraction);
+  if (mult <= firstMult || ceil <= bankFrac + 1e-9) return bankFrac;
+  const overshoot = Math.min(
+    1,
+    (mult - firstMult) / Math.max(1e-9, 1 + cfg.rent_profit_pct - firstMult),
+  );
+  return Math.min(1, bankFrac + (ceil - bankFrac) * overshoot * (1 - quality));
+}
+
+/**
+ * The aggressiveness dial bank, active from the fill (open-ignore included).
+ * Scalp dials sell 100%; otherwise bank the noise-scaled fraction and move
+ * the rest toward the rent trail.
+ */
+function maybeEarlyBank(
+  pos: Position,
+  snap: MarketSnapshot,
+  input: DecideInput,
+  baseFields: Partial<Position>,
+): Intent[] | null {
+  const cfg = input.config;
+  if (pos.did_early_bank || pos.did_rent || pos.rent_armed) return null;
+  if (!pos.fill_mcap) return null;
+  const mult = snap.mcap / pos.fill_mcap;
+  const { firstMult } = bankParams(cfg);
+  if (mult < firstMult) return null;
+  const frac = bankSize(cfg, mult, tapeQuality(snap, pos, cfg));
+  const base_low =
+    pos.base_low ||
+    robustLow(
+      pos.shakeout_samples.length ? pos.shakeout_samples : [pos.fill_mcap],
+      pos.shakeout_low || pos.fill_mcap,
+    );
+  if (frac >= 0.999) {
+    return [
+      annotate(
+        {
+          kind: "SELL_ALL",
+          level: "TRIM",
+          reason: "scalp_exit",
+          msg: `SCALP ${mult.toFixed(2)}× → sell 100% (dial=${cfg.sell_aggressiveness})`,
+          fields: { ...baseFields, base_low, last_reason: "scalp_exit", last_action: "SCALP" },
+        },
+        pos,
+        snap,
+      ),
+    ];
+  }
+  return [
+    annotate(
+      {
+        kind: "SELL_FRACTION",
+        level: "TRIM",
+        reason: "early_bank",
+        fraction: frac,
+        msg: `BANK ${mult.toFixed(2)}× → sell ${Math.round(frac * 100)}% (dial=${cfg.sell_aggressiveness})`,
+        phase: "SEEK_RENT",
+        multiple: mult,
+        base_low,
+        fields: {
+          ...baseFields,
+          phase: "SEEK_RENT",
+          base_low,
+          did_early_bank: true,
+          early_bank_frac: frac,
+          last_reason: "early_bank",
+          last_action: "EARLY_BANK",
+        },
+      },
+      pos,
+      snap,
+    ),
+  ];
+}
+
+/**
+ * Spiked (≥1.15× fill) then faded below 0.95× fill on a dead tape — noise, not
+ * a runner's shakeout. Sell 85%, and leave a 15% resurrection stub (moonbag)
+ * only when the stub clears the fee floor; otherwise one 100% sell, one fee.
+ */
+function maybeDeadTapeExit(
+  pos: Position,
+  snap: MarketSnapshot,
+  input: DecideInput,
+  baseFields: Partial<Position>,
+): Intent[] | null {
+  const cfg = input.config;
+  if (pos.did_rent || pos.rent_armed) return null;
+  if (!pos.spiked || !pos.fill_mcap) return null;
+  if (snap.mcap >= pos.fill_mcap * 0.95) return null;
+  if (tapeQuality(snap, pos, cfg) > 0.2) return null;
+  const stubValue = leftoverValueSol(pos, snap.mcap) * 0.15;
+  const fields = { ...baseFields, last_reason: "dead_tape_exit", last_action: "DEAD_TAPE" };
+  if (stubValue >= MIN_SELL_GROSS_SOL) {
+    return [
+      annotate(
+        {
+          kind: "SELL_FRACTION",
+          level: "DEAD",
+          reason: "dead_tape_exit",
+          fraction: 0.85,
+          msg: `DEAD tape after spike → sell 85%, moonbag the rest (stub ${stubValue.toFixed(4)} SOL)`,
+          fields,
+        },
+        pos,
+        snap,
+      ),
+      annotate(
+        {
+          kind: "SET_PHASE",
+          level: "MOON",
+          reason: "resurrection_stub",
+          msg: "resurrection stub forgotten — rides for ATH",
+          phase: "MOONBAG",
+          fields: { phase: "MOONBAG", last_reason: "resurrection_stub", last_action: "MOONBAG" },
+        },
+        pos,
+        snap,
+      ),
+    ];
+  }
+  return [
+    annotate(
+      {
+        kind: "SELL_ALL",
+        level: "DEAD",
+        reason: "dead_tape_exit",
+        msg: "DEAD tape after spike → sell 100% (stub below fee floor)",
+        fields,
+      },
+      pos,
+      snap,
+    ),
+  ];
+}
+
 function handleOpenIgnore(pos: Position, snap: MarketSnapshot, input: DecideInput): Intent[] {
   const flat = maybeFlatKill(pos, snap, input);
   if (flat) return flat;
   const cfg = input.config;
   const intents: Intent[] = [];
   const fields = patchFromSnap(pos, snap);
+  const dead = maybeDeadTapeExit(pos, snap, input, fields);
+  if (dead) return dead;
+  const bank = maybeEarlyBank(pos, snap, input, fields);
+  if (bank) return bank;
   const firstSell =
     pos.last_dev_balance > 0 && snap.dev_token_balance < pos.last_dev_balance * 0.98;
   if (firstSell) {
@@ -609,66 +756,14 @@ function handleShakeout(pos: Position, snap: MarketSnapshot, input: DecideInput)
   const flatline = maybeFlatline(pos, snap, input, { ...fields, dead_mcap_bars: deadBars });
   if (flatline) return [...extra, ...flatline];
 
+  const deadTape = maybeDeadTapeExit(pos, snap, input, { ...fields, dead_mcap_bars: deadBars });
+  if (deadTape) return [...extra, ...deadTape];
+
+  const bank = maybeEarlyBank(pos, snap, input, { ...fields, dead_mcap_bars: deadBars });
+  if (bank) return [...extra, ...bank];
+
   const age = ageSec(pos, input.now);
   const shakeoutEnd = cfg.ignore_open_seconds + cfg.shakeout_seconds;
-
-  // Aggressiveness dial: when the first-sell multiple prints during shakeout,
-  // the open is over and the desk banks now instead of waiting out the
-  // shakeout clock and watching the move fade. At dial 0 this is the 2.1×
-  // rent tag (20% bank); at dial 100 it scalps everything at 1.3×.
-  const { firstMult, bankFrac } = bankParams(cfg);
-  const bankTag = pos.fill_mcap > 0 && snap.mcap >= pos.fill_mcap * firstMult;
-  if (bankTag) {
-    const base_low = robustLow(samples, shakeout_low);
-    const mult = snap.mcap / pos.fill_mcap;
-    if (bankFrac >= 0.999) {
-      return [
-        ...extra,
-        annotate(
-          {
-            kind: "SELL_ALL",
-            level: "TRIM",
-            reason: "scalp_exit",
-            msg: `SCALP ${mult.toFixed(2)}× → sell 100% (dial=${cfg.sell_aggressiveness})`,
-            fields: {
-              ...fields,
-              base_low,
-              last_reason: "scalp_exit",
-              last_action: "SCALP",
-            },
-          },
-          pos,
-          snap,
-        ),
-      ];
-    }
-    return [
-      ...extra,
-      annotate(
-        {
-          kind: "SELL_FRACTION",
-          level: "TRIM",
-          reason: "early_bank",
-          fraction: bankFrac,
-          msg: `BANK ${mult.toFixed(2)}× → sell ${Math.round(bankFrac * 100)}% (dial=${cfg.sell_aggressiveness})`,
-          phase: "SEEK_RENT",
-          multiple: mult,
-          base_low,
-          fields: {
-            ...fields,
-            phase: "SEEK_RENT",
-            base_low,
-            did_early_bank: true,
-            early_bank_frac: bankFrac,
-            last_reason: "early_bank",
-            last_action: "EARLY_BANK",
-          },
-        },
-        pos,
-        snap,
-      ),
-    ];
-  }
 
   if (age >= shakeoutEnd) {
     const base_low = robustLow(samples, shakeout_low);
@@ -735,54 +830,13 @@ function handleSeekRent(pos: Position, snap: MarketSnapshot, input: DecideInput)
   // Aggressiveness dial — same early bank, post-shakeout. Only once, and only
   // before rent arms (after that the trail owns the exits). At dial 0 the bank
   // fraction equals the rent peel, so the classic peel/trail path runs instead.
-  const { firstMult, bankFrac } = bankParams(cfg);
-  if (
-    !armed &&
-    !pos.did_early_bank &&
-    bankFrac > cfg.rent_peel_fraction + 1e-9 &&
-    pos.fill_mcap > 0 &&
-    snap.mcap >= pos.fill_mcap * firstMult
-  ) {
-    const mult = snap.mcap / pos.fill_mcap;
-    if (bankFrac >= 0.999) {
-      return [
-        ...extra,
-        annotate(
-          {
-            kind: "SELL_ALL",
-            level: "TRIM",
-            reason: "scalp_exit",
-            msg: `SCALP ${mult.toFixed(2)}× → sell 100% (dial=${cfg.sell_aggressiveness})`,
-            fields: { ...fields, last_reason: "scalp_exit", last_action: "SCALP" },
-          },
-          pos,
-          snap,
-        ),
-      ];
-    }
-    return [
-      ...extra,
-      annotate(
-        {
-          kind: "SELL_FRACTION",
-          level: "TRIM",
-          reason: "early_bank",
-          fraction: bankFrac,
-          msg: `BANK ${mult.toFixed(2)}× → sell ${Math.round(bankFrac * 100)}% (dial=${cfg.sell_aggressiveness})`,
-          phase: "SEEK_RENT",
-          multiple: mult,
-          fields: {
-            ...fields,
-            did_early_bank: true,
-            early_bank_frac: bankFrac,
-            last_reason: "early_bank",
-            last_action: "EARLY_BANK",
-          },
-        },
-        pos,
-        snap,
-      ),
-    ];
+  const deadTape = maybeDeadTapeExit(pos, snap, input, fields);
+  if (deadTape) return [...extra, ...deadTape];
+
+  const { bankFrac } = bankParams(cfg);
+  if (!armed && !pos.did_early_bank && bankFrac > cfg.rent_peel_fraction + 1e-9) {
+    const bank = maybeEarlyBank(pos, snap, input, fields);
+    if (bank) return [...extra, ...bank];
   }
 
   if (!armed && age >= cfg.no_rent_timeout_seconds) {

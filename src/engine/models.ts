@@ -161,6 +161,8 @@ export interface Position {
   last_mcap: number;
   /** Set when the position closes (sell-all or fully exhausted). 0 while open. */
   closed_ts: number;
+  /** Printed at least 1.15× fill at some point — a spike happened, noise or runner. */
+  spiked: boolean;
 }
 
 export interface TokenCreate {
@@ -249,6 +251,9 @@ export interface LogEvent {
 
 export const TOKEN_UNIT = 1_000_000;
 
+/** No partial sell whose gross is below this — fees (tip + priority) would eat it. */
+export const MIN_SELL_GROSS_SOL = 0.005;
+
 export function hasSocials(s: Socials | undefined | null): boolean {
   if (!s) return false;
   return Boolean(s.twitter || s.telegram || s.website);
@@ -314,6 +319,7 @@ export function emptyPosition(partial: Partial<Position> & Pick<Position, "mint"
     last_action: "",
     last_mcap: 0,
     closed_ts: 0,
+    spiked: false,
     ...partial,
   };
 }

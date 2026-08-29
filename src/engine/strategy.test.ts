@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { BotEngine } from "./engine.ts";
-import { DEFAULT_CONFIG } from "./settings.ts";
+import { DEFAULT_CONFIG, bankParams } from "./settings.ts";
 import { DEFAULT_ALLOW_TXT, EMPTY_ALLOW_TXT } from "./allowlist.ts";
 import { leftoverValueSol } from "./models.ts";
 import {
@@ -456,6 +456,119 @@ describe("sell aggressiveness dial", () => {
     const after = e.positions.get(pos.mint)!;
     assert.notEqual(after.phase, "CLOSED");
     assert.ok(e.logs.some((l) => l.reason === "fee_floor_skip"));
+  });
+
+  it("bank fires during open-ignore: dial 100 scalps a t+5s spike", () => {
+    const e = engine({ sell_aggressiveness: 100 });
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 5_000);
+    e.onSnapshot(snap(e, pos.mint, 7300)); // 1.266× of 5768, trigger 1.25×
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.ok(e.logs.some((l) => l.reason === "scalp_exit"));
+  });
+
+  it("dead tape sells harder than ripping tape on the same print", () => {
+    const e = engine({ sell_aggressiveness: 12 }); // firstMult 2.00×, base 0.296
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 40_000);
+    e.onSnapshot(
+      snap(e, pos.mint, 11830, {
+        buy_sol: 2,
+        sell_sol: 9,
+        unique_buyers: 30,
+        unique_buyers_prev: 40,
+      }),
+    );
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.did_early_bank, true);
+    const frac = 1 - p.tokens_left / p.tokens_bought;
+    assert.ok(frac > 0.296 + 0.05, `dead tape should oversell the base, sold ${frac}`);
+  });
+
+  it("ripping tape only takes the dial base on the same print", () => {
+    const e = engine({ sell_aggressiveness: 12 });
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 16_000);
+    e.onSnapshot(snap(e, pos.mint, 6000));
+    e.setNow(ORIGIN + 40_000);
+    e.onSnapshot(
+      snap(e, pos.mint, 11830, {
+        buy_sol: 9,
+        sell_sol: 2,
+        unique_buyers: 48,
+        unique_buyers_prev: 40,
+      }),
+    );
+    const p = e.positions.get(pos.mint)!;
+    const frac = 1 - p.tokens_left / p.tokens_bought;
+    assert.ok(Math.abs(frac - 0.296) < 1e-6);
+  });
+
+  it("first-sell multiple steps in 0.05 increments from 2.10 to 1.25", () => {
+    assert.equal(bankParams(engine().config).firstMult, 2.1);
+    assert.equal(bankParams(engine({ sell_aggressiveness: 100 }).config).firstMult, 1.25);
+    const m = bankParams(engine({ sell_aggressiveness: 37 }).config).firstMult;
+    assert.equal(Math.round(m * 20), m * 20); // multiple of 0.05
+  });
+});
+
+describe("dead-tape exit", () => {
+  it("spike then dead-tape fade below 0.95× → sell 85%, moonbag the stub", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 10_000);
+    e.onSnapshot(snap(e, pos.mint, 7000)); // 1.214× — spike
+    e.setNow(ORIGIN + 20_000);
+    e.onSnapshot(
+      snap(e, pos.mint, 5200, {
+        buy_sol: 2,
+        sell_sol: 8,
+        unique_buyers: 30,
+        unique_buyers_prev: 40,
+      }),
+    );
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "MOONBAG");
+    assert.ok(Math.abs(p.tokens_left / p.tokens_bought - 0.15) < 1e-6);
+    assert.ok(e.logs.some((l) => l.reason === "dead_tape_exit"));
+    assert.ok(e.logs.some((l) => l.reason === "resurrection_stub"));
+  });
+
+  it("stub below the fee floor → one 100% sell", () => {
+    const e = engine({ ticket_sol: 0.02 });
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 10_000);
+    e.onSnapshot(snap(e, pos.mint, 7000));
+    e.setNow(ORIGIN + 20_000);
+    e.onSnapshot(
+      snap(e, pos.mint, 5200, {
+        buy_sol: 2,
+        sell_sol: 8,
+        unique_buyers: 30,
+        unique_buyers_prev: 40,
+      }),
+    );
+    const p = e.positions.get(pos.mint)!;
+    assert.equal(p.phase, "CLOSED");
+    assert.equal(p.tokens_left, 0);
+    assert.ok(e.logs.some((l) => l.reason === "dead_tape_exit"));
+    assert.ok(!e.logs.some((l) => l.reason === "resurrection_stub"));
+  });
+
+  it("healthy tape below 0.95× fill does not trigger the dead-tape exit", () => {
+    const e = engine();
+    const pos = buyAt(e, 5600);
+    e.setNow(ORIGIN + 10_000);
+    e.onSnapshot(snap(e, pos.mint, 7000));
+    e.setNow(ORIGIN + 20_000);
+    e.onSnapshot(snap(e, pos.mint, 5200)); // healthy defaults: buys dominant, unique up
+    const p = e.positions.get(pos.mint)!;
+    assert.notEqual(p.phase, "CLOSED");
+    assert.notEqual(p.phase, "MOONBAG");
+    assert.ok(!e.logs.some((l) => l.reason === "dead_tape_exit"));
   });
 });
 

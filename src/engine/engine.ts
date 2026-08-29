@@ -12,7 +12,8 @@ import { AllowList } from "./allowlist.ts";
 import { DEFAULT_CONFIG } from "./settings.ts";
 import { createRiskState, openPositionCount, type RiskState } from "./risk.ts";
 import { decide, moonbagReady } from "./strategy.ts";
-import { applyIntent, liveArmed, DryRunAdapter, MIN_SELL_GROSS_SOL, type SwapAdapter } from "./executor.ts";
+import { applyIntent, liveArmed, DryRunAdapter, type SwapAdapter } from "./executor.ts";
+import { MIN_SELL_GROSS_SOL } from "./models.ts";
 import { looksLikeSecret } from "./logger.ts";
 
 export interface EngineOpts {
